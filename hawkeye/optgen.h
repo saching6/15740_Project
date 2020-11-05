@@ -52,6 +52,9 @@ struct ADDR_INFO
     }
 };
 
+// Make optgen more powerful : 
+// 1) Increase OPTGEN_VECTOR_SIZE
+
 struct OPTgen
 {
     vector<unsigned int> liveness_history;

@@ -25,7 +25,7 @@ void InitReplacementState()
 
     for (int i=0; i<LLC_SETS; i++) {
         for (int j=0; j<LLC_WAYS; j++) {
-            lru[i][j] = j; // [ldery] - why do we initialize this to j
+            lru[i][j] = j; // [ldery] - give us an order to eject
         }
     }
 }
@@ -39,9 +39,11 @@ void InitReplacementState()
 //      uint64_t PC  = program counter
 //      uint64_t paddr = page to replace
 //      uint32_t type  =
+// Assumption is is that this is called whenever there is a cache miss
 uint32_t GetVictimInSet (uint32_t cpu, uint32_t set, const BLOCK *current_set, uint64_t PC, uint64_t paddr, uint32_t type)
 {
-    PrintVictimSet( cpu, set, current_set, PC, paddr, type );
+    // PrintVictimSet( cpu, set, current_set, PC, paddr, type );
+    cout << "In Victim "<< endl;
     for (int i=0; i<LLC_WAYS; i++)
         if (lru[set][i] == (LLC_WAYS-1))
             return i;
@@ -63,11 +65,11 @@ void PrintVictimSet (uint32_t cpu, uint32_t set, const BLOCK *current_set, uint6
 // [ldery]
 //      uint64_t victim_addr = victim address
 //      uint8_t hit = whether it was a hit or a miss
-
+// Called whether there is a hit or miss
 void UpdateReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t paddr, uint64_t PC, uint64_t victim_addr, uint32_t type, uint8_t hit)
 {
-    PrintReplacementState( cpu, set, way, paddr, PC, victim_addr, type, hit );
-
+    // PrintReplacementState( cpu, set, way, paddr, PC, victim_addr, type, hit );
+    cout << "In replace : " << victim_addr << endl;
     // update lru replacement state
     for (uint32_t i=0; i<LLC_WAYS; i++) {
         if (lru[set][i] < lru[set][way]) {
@@ -89,7 +91,7 @@ void PrintReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t p
 // use this function to print out your own stats on every heartbeat 
 void PrintStats_Heartbeat()
 {
-
+    cout << "In Print Stats" << endl;
 }
 
 // use this function to print out your own stats at the end of simulation
