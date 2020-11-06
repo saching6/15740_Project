@@ -24,6 +24,8 @@ using namespace std;
 #include <set>
 #include <vector>
 
+
+// Sachin: address info structure with 8byte address
 struct ADDR_INFO
 {
     uint64_t addr;

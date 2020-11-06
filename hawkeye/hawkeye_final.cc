@@ -158,7 +158,13 @@ void update_addr_history_lru(unsigned int sampler_set, unsigned int curr_lru)
 // called on every cache hit and cache fill
 void UpdateReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t paddr, uint64_t PC, uint64_t victim_addr, uint32_t type, uint8_t hit)
 {
+
+    // cout<<"*****************************************"<<endl;
+    // cout<<paddr<<endl;
     paddr = (paddr >> 6) << 6;
+    // cout<<paddr<<endl;
+    // cout<<"*****************************************"<<endl;
+    // paddr = (paddr >> 6) << 6;
 
     if(type == PREFETCH)
     {
@@ -181,6 +187,9 @@ void UpdateReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t 
 
         uint32_t sampler_set = (paddr >> 6) % SAMPLER_SETS; 
         uint64_t sampler_tag = CRC(paddr >> 12) % 256;
+        cout<<"*************************************************"<<endl;
+        cout<< (paddr >> 12)%256 <<"  --after CRC ---" <<CRC(paddr >> 12)%256 <<endl;
+        cout<<"*************************************************"<<endl;
         assert(sampler_set < SAMPLER_SETS);
 
         // This line has been used before. Since the right end of a usage interval is always 
