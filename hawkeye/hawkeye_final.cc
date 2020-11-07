@@ -46,7 +46,7 @@ bool prefetched[LLC_SETS][LLC_WAYS];
 HAWKEYE_PC_PREDICTOR* demand_predictor;  //Predictor
 HAWKEYE_PC_PREDICTOR* prefetch_predictor;  //Predictor
 
-#define OPTGEN_VECTOR_SIZE 128
+#define OPTGEN_VECTOR_SIZE 4096
 #include "optgen.h"
 OPTgen perset_optgen[LLC_SETS]; // per-set occupancy vectors; we only use 64 of these
 
@@ -58,10 +58,14 @@ OPTgen perset_optgen[LLC_SETS]; // per-set occupancy vectors; we only use 64 of 
 
 // Sampler to track 8x cache history for sampled sets
 // 2800 entris * 4 bytes per entry = 11.2KB
-#define SAMPLED_CACHE_SIZE 2800
-#define SAMPLER_WAYS 8
+#define SAMPLED_CACHE_SIZE 2048
+#define SAMPLER_WAYS 16
 #define SAMPLER_SETS SAMPLED_CACHE_SIZE/SAMPLER_WAYS
 vector<map<uint64_t, ADDR_INFO> > addr_history; // Sampler
+
+void PrintVictimSet (uint32_t cpu, uint32_t set, const BLOCK *current_set, uint64_t PC, uint64_t paddr, uint32_t type);
+void PrintReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t paddr, uint64_t PC, uint64_t victim_addr, uint32_t type, uint8_t hit);
+
 
 // initialize replacement state
 void InitReplacementState()
@@ -123,6 +127,16 @@ uint32_t GetVictimInSet (uint32_t cpu, uint32_t set, const BLOCK *current_set, u
     return 0;
 }
 
+// print arguments for GetVictimSet
+void PrintVictimSet (uint32_t cpu, uint32_t set, const BLOCK *current_set, uint64_t PC, uint64_t paddr, uint32_t type)
+{
+        printf( "Victim Set --> \n %u, %u, %u, %u, %u, ", cpu, set, PC, paddr, type );
+        printf( "%d, %d, %u, %u, %u, %u, %u\n", (*current_set).valid, (*current_set).dirty,
+                        (*current_set).address, (*current_set).full_addr, (*current_set).tag,
+                        (*current_set).data, (*current_set).cpu, (*current_set).lru );
+}
+
+
 void replace_addr_history_element(unsigned int sampler_set)
 {
     uint64_t lru_addr = 0;
@@ -158,13 +172,7 @@ void update_addr_history_lru(unsigned int sampler_set, unsigned int curr_lru)
 // called on every cache hit and cache fill
 void UpdateReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t paddr, uint64_t PC, uint64_t victim_addr, uint32_t type, uint8_t hit)
 {
-
-    // cout<<"*****************************************"<<endl;
-    // cout<<paddr<<endl;
-    paddr = (paddr >> 6) << 6;
-    // cout<<paddr<<endl;
-    // cout<<"*****************************************"<<endl;
-    // paddr = (paddr >> 6) << 6;
+    printf( "%u, %u, %u, %u, %u, %u\n", set, way, paddr, victim_addr, PC, hit );
 
     if(type == PREFETCH)
     {
@@ -187,9 +195,6 @@ void UpdateReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t 
 
         uint32_t sampler_set = (paddr >> 6) % SAMPLER_SETS; 
         uint64_t sampler_tag = CRC(paddr >> 12) % 256;
-        cout<<"*************************************************"<<endl;
-        cout<< (paddr >> 12)%256 <<"  --after CRC ---" <<CRC(paddr >> 12)%256 <<endl;
-        cout<<"*************************************************"<<endl;
         assert(sampler_set < SAMPLER_SETS);
 
         // This line has been used before. Since the right end of a usage interval is always 
@@ -308,6 +313,13 @@ void UpdateReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t 
         rrpv[set][way] = 0;
     }
 }
+
+// print arguments for UpdateReplacementState
+void PrintReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t paddr, uint64_t PC, uint64_t victim_addr, uint32_t type, uint8_t hit)
+{
+        printf( "Replacement State --> \n %u, %u, %u, %u, %u, %u, %u, %u\n", cpu, set, way, paddr, PC, victim_addr, type, hit );
+}
+
 
 // use this function to print out your own stats on every heartbeat 
 void PrintStats_Heartbeat()

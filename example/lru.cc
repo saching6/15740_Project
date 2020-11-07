@@ -41,9 +41,8 @@ void InitReplacementState()
 //      uint32_t type  =
 uint32_t GetVictimInSet (uint32_t cpu, uint32_t set, const BLOCK *current_set, uint64_t PC, uint64_t paddr, uint32_t type)
 {
-
-    cout<<"--------------------------------GET VICTIM CALLED-----------------------------"<<endl;
-    PrintVictimSet( cpu, set, current_set, PC, paddr, type );
+    //cout<<"--------------------------------GET VICTIM CALLED-----------------------------"<<endl;
+    //PrintVictimSet( cpu, set, current_set, PC, paddr, type );
     for (int i=0; i<LLC_WAYS; i++)
         if (lru[set][i] == (LLC_WAYS-1))
             return i;
@@ -55,10 +54,10 @@ uint32_t GetVictimInSet (uint32_t cpu, uint32_t set, const BLOCK *current_set, u
 void PrintVictimSet (uint32_t cpu, uint32_t set, const BLOCK *current_set, uint64_t PC, uint64_t paddr, uint32_t type)
 {
 
-	// printf( "Victim Set --> \n %u, %u, %u, %u, %u, ", cpu, set, PC, paddr, type );
-	// printf( "%d, %d, %u, %u, %u, %u, %u\n", (*current_set).valid, (*current_set).dirty,
-	// 		(*current_set).address, (*current_set).full_addr, (*current_set).tag,
-	// 		(*current_set).data, (*current_set).cpu, (*current_set).lru );
+	printf( "Victim Set --> \n %u, %u, %u, %u, %u, ", cpu, set, PC, paddr, type );
+	printf( "%d, %d, %u, %u, %u, %u, %u\n", (*current_set).valid, (*current_set).dirty,
+	 		(*current_set).address, (*current_set).full_addr, (*current_set).tag,
+	 		(*current_set).data, (*current_set).cpu, (*current_set).lru );
 }
 
 
@@ -69,8 +68,11 @@ void PrintVictimSet (uint32_t cpu, uint32_t set, const BLOCK *current_set, uint6
 
 void UpdateReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t paddr, uint64_t PC, uint64_t victim_addr, uint32_t type, uint8_t hit)
 {
+    //cout<<"--------------------------------UPDATE VICTIM CALLED-----------------------------"<<endl;
     // PrintReplacementState( cpu, set, way, paddr, PC, victim_addr, type, hit );
-    cout<<"--------------------------------UPDATE VICTIM CALLED-----------------------------"<<endl;
+    
+    printf( "%u, %u, %u, %u, %u, %u\n", set, way, paddr, victim_addr, PC, hit );
+
     // update lru replacement state
     for (uint32_t i=0; i<LLC_WAYS; i++) {
         if (lru[set][i] < lru[set][way]) {
@@ -86,7 +88,7 @@ void UpdateReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t 
 // print arguments for UpdateReplacementState
 void PrintReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t paddr, uint64_t PC, uint64_t victim_addr, uint32_t type, uint8_t hit)
 {
-	// printf( "Replacement State --> \n %u, %u, %u, %u, %u, %u, %u, %u\n", cpu, set, way, paddr, PC, victim_addr, type, hit );
+	printf( "Replacement State --> \n %u, %u, %u, %u, %u, %u, %u, %u\n", cpu, set, way, paddr, PC, victim_addr, type, hit );
 }
 
 // use this function to print out your own stats on every heartbeat 
