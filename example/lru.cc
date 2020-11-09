@@ -42,8 +42,8 @@ void InitReplacementState()
 // Assumption is is that this is called whenever there is a cache miss
 uint32_t GetVictimInSet (uint32_t cpu, uint32_t set, const BLOCK *current_set, uint64_t PC, uint64_t paddr, uint32_t type)
 {
-    // PrintVictimSet( cpu, set, current_set, PC, paddr, type );
-    cout << "In Victim "<< endl;
+    //cout<<"--------------------------------GET VICTIM CALLED-----------------------------"<<endl;
+    //PrintVictimSet( cpu, set, current_set, PC, paddr, type );
     for (int i=0; i<LLC_WAYS; i++)
         if (lru[set][i] == (LLC_WAYS-1))
             return i;
@@ -54,10 +54,11 @@ uint32_t GetVictimInSet (uint32_t cpu, uint32_t set, const BLOCK *current_set, u
 // print arguments for GetVictimSet
 void PrintVictimSet (uint32_t cpu, uint32_t set, const BLOCK *current_set, uint64_t PC, uint64_t paddr, uint32_t type)
 {
+
 	printf( "Victim Set --> \n %u, %u, %u, %u, %u, ", cpu, set, PC, paddr, type );
 	printf( "%d, %d, %u, %u, %u, %u, %u\n", (*current_set).valid, (*current_set).dirty,
-			(*current_set).address, (*current_set).full_addr, (*current_set).tag,
-			(*current_set).data, (*current_set).cpu, (*current_set).lru );
+	 		(*current_set).address, (*current_set).full_addr, (*current_set).tag,
+	 		(*current_set).data, (*current_set).cpu, (*current_set).lru );
 }
 
 
@@ -68,8 +69,10 @@ void PrintVictimSet (uint32_t cpu, uint32_t set, const BLOCK *current_set, uint6
 // Called whether there is a hit or miss
 void UpdateReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t paddr, uint64_t PC, uint64_t victim_addr, uint32_t type, uint8_t hit)
 {
+    //cout<<"--------------------------------UPDATE VICTIM CALLED-----------------------------"<<endl;
     // PrintReplacementState( cpu, set, way, paddr, PC, victim_addr, type, hit );
-    cout << "In replace : " << victim_addr << endl;
+    
+    printf( "%u, %u, %u, %u, %u, %u\n", set, way, paddr, victim_addr, PC, hit );
     // update lru replacement state
     for (uint32_t i=0; i<LLC_WAYS; i++) {
         if (lru[set][i] < lru[set][way]) {

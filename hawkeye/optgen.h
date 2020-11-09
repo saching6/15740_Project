@@ -24,6 +24,8 @@ using namespace std;
 #include <set>
 #include <vector>
 
+
+// Sachin: address info structure with 8byte address
 struct ADDR_INFO
 {
     uint64_t addr;
@@ -85,8 +87,15 @@ struct OPTgen
         liveness_history[curr_quanta] = 0;
     }
 
+    void PrintShouldCache( uint64_t curr_quanta, uint64_t last_quanta )
+    {
+	printf( "Optgen Should Cache --> \n %u, %u\n", curr_quanta, last_quanta );
+    }
+
     bool should_cache(uint64_t curr_quanta, uint64_t last_quanta)
     {
+	//PrintShouldCache( curr_quanta, last_quanta );
+
         bool is_cache = true;
 
         unsigned int i = last_quanta;
