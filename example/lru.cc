@@ -6,13 +6,14 @@
 ////////////////////////////////////////////
 
 #include "../inc/champsim_crc2.h"
+#include <inttypes.h>
 
 #define NUM_CORE 1
 #define LLC_SETS NUM_CORE*2048
 #define LLC_WAYS 16
 
-void PrintVictimSet (uint32_t cpu, uint32_t set, const BLOCK *current_set, uint64_t PC, uint64_t paddr, uint32_t type);
-void PrintReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t paddr, uint64_t PC, uint64_t victim_addr, uint32_t type, uint8_t hit);
+// void PrintVictimSet (uint32_t cpu, uint32_t set, const BLOCK *current_set, uint64_t PC, uint64_t paddr, uint32_t type);
+// void PrintReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t paddr, uint64_t PC, uint64_t victim_addr, uint32_t type, uint8_t hit);
 
 uint32_t lru[LLC_SETS][LLC_WAYS];
 
@@ -52,14 +53,14 @@ uint32_t GetVictimInSet (uint32_t cpu, uint32_t set, const BLOCK *current_set, u
 }
 
 // print arguments for GetVictimSet
-void PrintVictimSet (uint32_t cpu, uint32_t set, const BLOCK *current_set, uint64_t PC, uint64_t paddr, uint32_t type)
-{
+// void PrintVictimSet (uint32_t cpu, uint32_t set, const BLOCK *current_set, uint64_t PC, uint64_t paddr, uint32_t type)
+// {
 
-	printf( "Victim Set --> \n %u, %u, %u, %u, %u, ", cpu, set, PC, paddr, type );
-	printf( "%d, %d, %u, %u, %u, %u, %u\n", (*current_set).valid, (*current_set).dirty,
-	 		(*current_set).address, (*current_set).full_addr, (*current_set).tag,
-	 		(*current_set).data, (*current_set).cpu, (*current_set).lru );
-}
+// 	printf( "Victim Set --> \n %u, %u, %u, %u, %u, ", cpu, set, PC, paddr, type );
+// 	printf( "%d, %d, %u, %u, %u, %u, %u\n", (*current_set).valid, (*current_set).dirty,
+// 	 		(*current_set).address, (*current_set).full_addr, (*current_set).tag,
+// 	 		(*current_set).data, (*current_set).cpu, (*current_set).lru );
+// }
 
 
 // called on every cache hit and cache fill
@@ -72,7 +73,7 @@ void UpdateReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t 
     //cout<<"--------------------------------UPDATE VICTIM CALLED-----------------------------"<<endl;
     // PrintReplacementState( cpu, set, way, paddr, PC, victim_addr, type, hit );
     
-    printf( "%u, %u, %u, %u, %u, %u\n", set, way, paddr, victim_addr, PC, hit );
+    printf( "%" PRIu32 ", %" PRIu32 ", %" PRIu64 ", %" PRIu64 ", %" PRIu64 ", %" PRIu8 "\n", set, way, paddr, victim_addr, PC, hit );
     // update lru replacement state
     for (uint32_t i=0; i<LLC_WAYS; i++) {
         if (lru[set][i] < lru[set][way]) {
@@ -86,10 +87,10 @@ void UpdateReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t 
 }
 
 // print arguments for UpdateReplacementState
-void PrintReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t paddr, uint64_t PC, uint64_t victim_addr, uint32_t type, uint8_t hit)
-{
-	printf( "Replacement State --> \n %u, %u, %u, %u, %u, %u, %u, %u\n", cpu, set, way, paddr, PC, victim_addr, type, hit );
-}
+// void PrintReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t paddr, uint64_t PC, uint64_t victim_addr, uint32_t type, uint8_t hit)
+// {
+// 	printf( "Replacement State --> \n %u, %u, %u, %u, %u, %u, %u, %u\n", cpu, set, way, paddr, PC, victim_addr, type, hit );
+// }
 
 // use this function to print out your own stats on every heartbeat 
 void PrintStats_Heartbeat()

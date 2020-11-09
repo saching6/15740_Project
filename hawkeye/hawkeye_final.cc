@@ -15,6 +15,7 @@
 // Source code for configs 1 and 2
 
 #include "../inc/champsim_crc2.h"
+#include <inttypes.h>
 #include <map>
 
 #define NUM_CORE 1
@@ -58,12 +59,13 @@ OPTgen perset_optgen[LLC_SETS]; // per-set occupancy vectors; we only use 64 of 
 
 // Sampler to track 8x cache history for sampled sets
 // 2800 entris * 4 bytes per entry = 11.2KB
-#define SAMPLED_CACHE_SIZE 2048
 #define SAMPLER_WAYS 16
-#define SAMPLER_SETS SAMPLED_CACHE_SIZE/SAMPLER_WAYS
+#define SAMPLER_SETS 2048
+#define SAMPLED_CACHE_SIZE SAMPLER_SETS * SAMPLER_WAYS
+
 vector<map<uint64_t, ADDR_INFO> > addr_history; // Sampler
 
-void PrintVictimSet (uint32_t cpu, uint32_t set, const BLOCK *current_set, uint64_t PC, uint64_t paddr, uint32_t type);
+// void PrintVictimSet (uint32_t cpu, uint32_t set, const BLOCK *current_set, uint64_t PC, uint64_t paddr, uint32_t type);
 void PrintReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t paddr, uint64_t PC, uint64_t victim_addr, uint32_t type, uint8_t hit);
 
 
@@ -128,13 +130,13 @@ uint32_t GetVictimInSet (uint32_t cpu, uint32_t set, const BLOCK *current_set, u
 }
 
 // print arguments for GetVictimSet
-void PrintVictimSet (uint32_t cpu, uint32_t set, const BLOCK *current_set, uint64_t PC, uint64_t paddr, uint32_t type)
-{
-        printf( "Victim Set --> \n %u, %u, %u, %u, %u, ", cpu, set, PC, paddr, type );
-        printf( "%d, %d, %u, %u, %u, %u, %u\n", (*current_set).valid, (*current_set).dirty,
-                        (*current_set).address, (*current_set).full_addr, (*current_set).tag,
-                        (*current_set).data, (*current_set).cpu, (*current_set).lru );
-}
+// void PrintVictimSet (uint32_t cpu, uint32_t set, const BLOCK *current_set, uint64_t PC, uint64_t paddr, uint32_t type)
+// {
+//         printf( "Victim Set --> \n %u, %u, %u, %u, %u, ", cpu, set, PC, paddr, type );
+//         printf( "%d, %d, %u, %u, %u, %u, %u\n", (*current_set).valid, (*current_set).dirty,
+//                         (*current_set).address, (*current_set).full_addr, (*current_set).tag,
+//                         (*current_set).data, (*current_set).cpu, (*current_set).lru );
+// }
 
 
 void replace_addr_history_element(unsigned int sampler_set)
@@ -172,7 +174,6 @@ void update_addr_history_lru(unsigned int sampler_set, unsigned int curr_lru)
 // called on every cache hit and cache fill
 void UpdateReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t paddr, uint64_t PC, uint64_t victim_addr, uint32_t type, uint8_t hit)
 {
-    printf( "%u, %u, %u, %u, %u, %u\n", set, way, paddr, victim_addr, PC, hit );
 
     if(type == PREFETCH)
     {
@@ -288,6 +289,7 @@ void UpdateReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t 
     if (type == PREFETCH)
         new_prediction = prefetch_predictor->get_prediction (PC);
 
+    printf( "%" PRIu32 ", %" PRIu32 ", %" PRIu64 ", %" PRIu64 ", %" PRIu64 ", %" PRIu8 "\n", set, way, paddr, victim_addr, PC, hit );
     signatures[set][way] = PC;
 
     //Set RRIP values and age cache-friendly line
@@ -315,10 +317,10 @@ void UpdateReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t 
 }
 
 // print arguments for UpdateReplacementState
-void PrintReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t paddr, uint64_t PC, uint64_t victim_addr, uint32_t type, uint8_t hit)
-{
-        printf( "Replacement State --> \n %u, %u, %u, %u, %u, %u, %u, %u\n", cpu, set, way, paddr, PC, victim_addr, type, hit );
-}
+// void PrintReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t paddr, uint64_t PC, uint64_t victim_addr, uint32_t type, uint8_t hit)
+// {
+//         printf( "Replacement State --> \n %u, %u, %u, %u, %u, %u, %u, %u\n", cpu, set, way, paddr, PC, victim_addr, type, hit );
+// }
 
 
 // use this function to print out your own stats on every heartbeat 
