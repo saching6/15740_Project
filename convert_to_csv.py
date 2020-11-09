@@ -2,14 +2,14 @@ import re
 import argparse
 
 def clean( file_in, file_out ):
-    re_pattern = "\d{1,20}, "*5
+    re_pattern = "\d{1,20}, "*7
     re_pattern += "\d{1,20}"
 
     with open( file_in, "r+" ) as f:
         lines = f.readlines()
 
     with open( file_out, "w+" ) as f:
-        f.write( "Set,Way,Physical Address,Victim Address,Program Counter,Hit" )
+        f.write( "Set,Way,Physical Address,Victim Address,Program Counter,Type,Hit,Cache Friendly" )
         for line in lines:
             val = re.search( re_pattern, line )
             if val is not None:

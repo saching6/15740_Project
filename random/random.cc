@@ -6,10 +6,13 @@
 ////////////////////////////////////////////
 
 #include "../inc/champsim_crc2.h"
+#include <stdlib.h>
 
 #define NUM_CORE 1
 #define LLC_SETS NUM_CORE*2048
 #define LLC_WAYS 16
+
+//srand((unsigned)0);
 
 /*
 void PrintVictimSet (uint32_t cpu, uint32_t set, const BLOCK *current_set, uint64_t PC, uint64_t paddr, uint32_t type);
@@ -17,6 +20,7 @@ void PrintReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t p
 */
 
 uint32_t lru[LLC_SETS][LLC_WAYS];
+
 
 // initialize replacement state
 // [ldery] - in total, we have LLC_SETS, each with LLC_WAYS. We would like to come up with a "within-set"
@@ -32,6 +36,7 @@ void InitReplacementState()
     }
 }
 
+
 // find replacement victim
 // return value should be 0 ~ 15 or 16 (bypass)
 // [ldery]
@@ -43,13 +48,7 @@ void InitReplacementState()
 //      uint32_t type  =
 uint32_t GetVictimInSet (uint32_t cpu, uint32_t set, const BLOCK *current_set, uint64_t PC, uint64_t paddr, uint32_t type)
 {
-    //cout<<"--------------------------------GET VICTIM CALLED-----------------------------"<<endl;
-    //PrintVictimSet( cpu, set, current_set, PC, paddr, type );
-    for (int i=0; i<LLC_WAYS; i++)
-        if (lru[set][i] == (LLC_WAYS-1))
-            return i;
-
-    return 0;
+    return (int)rand() % LLC_WAYS;
 }
 
 /*
@@ -75,17 +74,6 @@ void UpdateReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t 
     //cout<<"--------------------------------UPDATE VICTIM CALLED-----------------------------"<<endl;
     // PrintReplacementState( cpu, set, way, paddr, PC, victim_addr, type, hit );
     printf( "%u, %u, %lu, %lu, %lu, %u, %u, %u\n", set, way, paddr, victim_addr, PC, type, hit, false ); 
-
-    // update lru replacement state
-    for (uint32_t i=0; i<LLC_WAYS; i++) {
-        if (lru[set][i] < lru[set][way]) {
-            lru[set][i]++;
-
-            if (lru[set][i] == LLC_WAYS)
-                assert(0);
-        }
-    }
-    lru[set][way] = 0; // promote to the MRU position
 }
 
 /*
