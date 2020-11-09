@@ -87,10 +87,12 @@ struct OPTgen
         liveness_history[curr_quanta] = 0;
     }
 
+    /*
     void PrintShouldCache( uint64_t curr_quanta, uint64_t last_quanta )
     {
 	   // printf( "Optgen Should Cache --> \n %u, %u\n", curr_quanta, last_quanta );
     }
+    */
 
     bool should_cache(uint64_t curr_quanta, uint64_t last_quanta)
     {
