@@ -29,7 +29,7 @@ uint32_t rrpv[LLC_SETS][LLC_WAYS];
 
 //Per-set timers; we only use 64 of these
 //Budget = 64 sets * 1 timer per set * 10 bits per timer = 80 bytes
-#define TIMER_SIZE 1024
+#define TIMER_SIZE 128
 uint64_t perset_mytimer[LLC_SETS];
 
 // Signatures for sampled sets; we only use 64 of these
@@ -47,7 +47,7 @@ bool prefetched[LLC_SETS][LLC_WAYS];
 HAWKEYE_PC_PREDICTOR* demand_predictor;  //Predictor
 HAWKEYE_PC_PREDICTOR* prefetch_predictor;  //Predictor
 
-#define OPTGEN_VECTOR_SIZE 4096
+#define OPTGEN_VECTOR_SIZE 1
 #include "optgen.h"
 OPTgen perset_optgen[LLC_SETS]; // per-set occupancy vectors; we only use 64 of these
 
@@ -293,10 +293,8 @@ void UpdateReplacementState (uint32_t cpu, uint32_t set, uint32_t way, uint64_t 
     bool new_prediction = demand_predictor->get_prediction (PC);
     if (type == PREFETCH)
         new_prediction = prefetch_predictor->get_prediction (PC);
-
-    printf( "%" PRIu32 ", %" PRIu32 ", %" PRIu64 ", %" PRIu64 ", %" PRIu64 ", %" PRIu8 "\n", set, way, paddr, victim_addr, PC, hit );
+    printf( "%u, %u, %lu, %lu, %lu, %u, %u, %u\n", set, way, paddr, victim_addr, PC, type, hit, new_prediction );
     signatures[set][way] = PC;
-
     //Set RRIP values and age cache-friendly line
     if(!new_prediction)
         rrpv[set][way] = maxRRPV;

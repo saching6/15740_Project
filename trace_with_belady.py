@@ -19,6 +19,7 @@ def belady( df ):
 
         if p_addr in cache[which_set]:
             hit[i] = 1
+			# still need to determine whether friendly or not
         else:
             bel = np.zeros( ways )
             for j, way in enumerate( cache[which_set] ):
@@ -33,17 +34,27 @@ def belady( df ):
                 else:
                     bel[j] = future_acc[0]
 
-                if all( bel > 0 ):
-                    next_access = np.where( df['Physical Address'][i+1:] == p_addr )[0]
-                    if len( next_access ) == 0:
-                        next_access = np.inf
-                    else:
-                        next_access = next_access[0]
+			if all( bel > 0 ):
+				next_access = np.where( df['Physical Address'][i+1:] == p_addr )[0]
+				if len( next_access ) == 0:
+					# cache-averse
+					next_access = np.inf
+				else:
+					next_access = next_access[0]
 
-                    if any( next_access <= bel ):
-                        replace = np.argmax( bel )
-                        evict_way[i] = replace
-                        cache[which_set,replace] = p_addr
+				if any( next_access <= bel ):
+					# Approach 1. 
+					# why would we want to keep something else if 
+					# cache-friendly if it's reuse distance is less than the second worst
+					# cache-averse if it's reuse-distance is greater than second worst but less than worse
+					# Approach 2
+					# [a=10, b=5, c=11, d=6] -> which to evict
+					# 
+					replace = np.argmax( bel )
+					evict_way[i] = replace
+					cache[which_set,replace] = p_addr
+				else:
+					# mark cache-averse ?
 
                 cache_hist[i,:] = cache[which_set].tolist()
     
