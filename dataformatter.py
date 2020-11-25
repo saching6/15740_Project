@@ -1,11 +1,13 @@
 import numpy as np
 import torch
+import pandas as pd
 
 
 def csv_to_data(fname):
-    # converts a csv into a an array. Each array entry has a dictionary with the inputs and outputs
-    # Todo [figure out how to parse and convert the csv to required form]
-    pass
+    df = pd.load_csv(fname)
+	header_names = list(df.columns())
+	df_npy = df.to_numpy()
+	
 
 
 def get_batch_iterator(data, batch_sz, shuffle=True):
