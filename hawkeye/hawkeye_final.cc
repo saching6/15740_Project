@@ -28,7 +28,7 @@ uint32_t rrpv[LLC_SETS][LLC_WAYS];
 
 //Per-set timers; we only use 64 of these
 //Budget = 64 sets * 1 timer per set * 10 bits per timer = 80 bytes
-#define TIMER_SIZE 1024
+#define TIMER_SIZE 128
 uint64_t perset_mytimer[LLC_SETS];
 
 // Signatures for sampled sets; we only use 64 of these
@@ -46,7 +46,7 @@ bool prefetched[LLC_SETS][LLC_WAYS];
 HAWKEYE_PC_PREDICTOR* demand_predictor;  //Predictor
 HAWKEYE_PC_PREDICTOR* prefetch_predictor;  //Predictor
 
-#define OPTGEN_VECTOR_SIZE 4096
+#define OPTGEN_VECTOR_SIZE 1
 #include "optgen.h"
 OPTgen perset_optgen[LLC_SETS]; // per-set occupancy vectors; we only use 64 of these
 
@@ -58,7 +58,7 @@ OPTgen perset_optgen[LLC_SETS]; // per-set occupancy vectors; we only use 64 of 
 
 // Sampler to track 8x cache history for sampled sets
 // 2800 entris * 4 bytes per entry = 11.2KB
-#define SAMPLED_CACHE_SIZE 16*2048
+#define SAMPLED_CACHE_SIZE 16*1024
 #define SAMPLER_WAYS 16
 #define SAMPLER_SETS SAMPLED_CACHE_SIZE/SAMPLER_WAYS
 vector<map<uint64_t, ADDR_INFO> > addr_history; // Sampler
