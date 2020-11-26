@@ -3,15 +3,6 @@ import torch.nn as nn
 from torch.nn.init import xavier_uniform_, kaiming_uniform_, zeros_, kaiming_normal_
 from collections import defaultdict
 
-# DEFINE MODEL SPECIFIC HYPER-PARAMS HERE
-FC_CONFIG = {
-    'layers': [100, 200, 2],
-    'dropout': 0.2
-}
-
-TRANSFORMER_CONFIG = {
-    'dropout': 0.2,
-}
 
 
 # Weight initialization
