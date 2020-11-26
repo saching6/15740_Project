@@ -3,7 +3,7 @@ import torch
 import pandas as pd
 
 
-def csv_to_data(fname, chosen_columns=['Program Counter', 'Cache Friendly']):
+def csv_to_data(fname, chosen_columns=['Program Counter', 'Set', 'Cache Friendly']):
     df = pd.read_csv(fname)
     header_names = list(df.columns)
     df_npy = df.to_numpy()

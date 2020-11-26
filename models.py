@@ -7,6 +7,7 @@ import pdb
 FC_CONFIG = {
     'layers': [100, 200, 1],
     'dropout': 0.2,
+	'feat_map': {'Program Counter' : 0, 'Set': 1, 'Cache Friendly': 2}
 }
 
 # Weight initialization
@@ -34,7 +35,10 @@ def get_model(model_type, **kwargs):
 		assert 'layers' in kwargs, 'Need to specify layers for MLP model'
 		assert 'dropout' in kwargs, 'Need to specify dropout for MLP model'
 		loss_name = 'CE' if kwargs['layers'][-1] != 1 else 'BCE'
-		model = MLP(kwargs['layers'], dp_ratio=kwargs['dropout'], loss_name=loss_name)
+		model = MLP(
+						kwargs['layers'], dp_ratio=kwargs['dropout'],
+						loss_name=loss_name, feat_idx_map=kwargs['feat_map']
+					)
 	elif model_type == 'TRANSFORMER':
 		kwargs = TRANSFORMER_CONFIG
 		pass
@@ -93,10 +97,16 @@ class Model(nn.Module):
 class MLP(Model):
 	def __init__(
 					self, layers, init_method='xavier_unif',
-					loss_name='CE', dp_ratio=0.3):
+					loss_name='CE', dp_ratio=0.3, feat_idx_map=None):
 		super(MLP, self).__init__(
 									loss_name=loss_name,
 								)
+		assert feat_idx_map is not None, 'Need to specify a mapping from feature name to its position'
+		self.feat_idx_map = feat_idx_map
+		# TODO [all] - assuming we are concatenating features
+		assert layers[0] % (len(feat_idx_map) - 1) == 0, 'The input dimension should be divisible by # of features'
+		
+		self.emb_dim = int(layers[0] / (len(feat_idx_map) - 1))
 		sequence = []
 		self.layers = layers
 		for i in range(len(layers) - 1):
@@ -106,30 +116,54 @@ class MLP(Model):
 		self.model = nn.Sequential(*sequence[:-1])  # [:-1] to remove the last relu
 		self.model.apply(weight_init(init_method))
 	
-	def prep_for_data(self, dataset):
-		# TODO [ldery]
-		# NOTE : ASSUMING THE LAST INDEX IS THE TARGET
-		# NOTE : ASSUMING THE FIRST INDEX IS THE PC
-		all_pcs = set([b[0] for b in dataset])
-		self.pc_emb_map = defaultdict(int)
+	def create_embedder(self, dataset, feat_idx):
+		all_entries = set([b[feat_idx] for b in dataset])
 		counter = 1
-		for pc in all_pcs:
-			self.pc_emb_map[pc] = counter
+		this_map = defaultdict(int)
+		for id_ in all_entries:
+			this_map[id_] = counter
 			counter += 1
-		self.pc_embedding = torch.nn.Embedding(counter, self.layers[0], 0)
+		embedder = torch.nn.Embedding(counter, self.emb_dim, 0)
+		return this_map, embedder
+	
+	def get_data_columns(self):
+		ncols = len(self.feat_idx_map)
+		col_names = ['' for _ in range(ncols)]
+		for k, v in self.feat_idx_map.items():
+			if v >= ncols:
+				# This is the target column
+				continue
+			col_names[v] = k
+		return col_names
+
+	def prep_for_data(self, dataset):
+		if 'Program Counter' in self.feat_idx_map:
+			feat_idx = self.feat_idx_map['Program Counter']
+			self.pc_emb_map, self.pc_embedding = self.create_embedder(dataset, feat_idx)
+		if 'Set' in self.feat_idx_map:
+			feat_idx = self.feat_idx_map['Set']
+			self.set_emb_map, self.set_embedding = self.create_embedder(dataset, feat_idx)
+		# TODO [all] - add to this as more features are introduced
 
 	def format_batch(self, batch):
 		# TODO [ldery]
 		# NOTE : ASSUMING THE LAST INDEX IS THE TARGET
-		# NOTE : ASSUMING THE FIRST INDEX IS THE PC
 		assert hasattr(self, 'pc_emb_map'), 'This model should have an embedding map for pc'
-		x, y = [], []
+		x_pc, x_set, y = [], [], []
 		for b in batch:
 			y.append(b[-1])
 			# Convert the program counter to an embedding
-			x.append(self.pc_emb_map[b[0]])
-		x = torch.tensor(x)
+			if 'Program Counter' in self.feat_idx_map:
+				x_pc.append(self.pc_emb_map[b[self.feat_idx_map['Program Counter']]])
+			if 'Set' in self.feat_idx_map:
+				x_set.append(self.set_emb_map[b[self.feat_idx_map['Set']]])
+		x = torch.tensor(x_pc)
 		x = self.pc_embedding(x)
 		y = torch.tensor(y).unsqueeze(-1).float()
+		# TODO [ldery / all] - this is not neat - figure out a better way to do this
+		if len(self.feat_idx_map) == 2:
+			return x, y
+		elif len(self.feat_idx_map) == 3:
+			x_set = self.set_embedding(torch.tensor(x_set))
+			x = torch.cat([x, x_set], dim=-1)
 		return x, y
-
