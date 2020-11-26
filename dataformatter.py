@@ -4,8 +4,8 @@ import pandas as pd
 
 
 def csv_to_data(fname, chosen_columns=['Program Counter', 'Cache Friendly']):
-    df = pd.load_csv(fname)
-    header_names = list(df.columns())
+    df = pd.read_csv(fname)
+    header_names = list(df.columns)
     df_npy = df.to_numpy()
     c_ids = [header_names.index(x) for x in chosen_columns]
     return df_npy[:, c_ids]

@@ -2,8 +2,12 @@ import torch
 import torch.nn as nn
 from torch.nn.init import xavier_uniform_, kaiming_uniform_, zeros_, kaiming_normal_
 from collections import defaultdict
+import pdb
 
-
+FC_CONFIG = {
+    'layers': [100, 200, 1],
+    'dropout': 0.2,
+}
 
 # Weight initialization
 def weight_init(init_method):
@@ -30,7 +34,7 @@ def get_model(model_type, **kwargs):
 		assert 'layers' in kwargs, 'Need to specify layers for MLP model'
 		assert 'dropout' in kwargs, 'Need to specify dropout for MLP model'
 		loss_name = 'CE' if kwargs['layers'][-1] != 1 else 'BCE'
-		model = MLP(kwargs['layers'], dp_ratio=kwargs['dropout'])
+		model = MLP(kwargs['layers'], dp_ratio=kwargs['dropout'], loss_name=loss_name)
 	elif model_type == 'TRANSFORMER':
 		kwargs = TRANSFORMER_CONFIG
 		pass
@@ -62,7 +66,6 @@ class Model(nn.Module):
 			# We need to do a sigmoid if we're using binary labels
 			m_out = torch.sigmoid(m_out)
 		loss = self.loss_fn(m_out, y)
-		# Get the acccuracy
 		acc = self.get_accuracy(m_out, y)
 		return loss, acc
 
@@ -71,6 +74,7 @@ class Model(nn.Module):
 			argmax = pred.argmax(dim=-1).squeeze()
 			if pred.shape[-1] == 1:  # We have only 1 output - so sigmoid.
 				argmax = (pred > 0.5).squeeze().float()
+				targets = targets.squeeze()
 			return argmax.eq(targets).sum()
 
 	def criterion(self, outs, target):
@@ -124,8 +128,8 @@ class MLP(Model):
 			y.append(b[-1])
 			# Convert the program counter to an embedding
 			x.append(self.pc_emb_map[b[0]])
-		x = torch.tensor(x).unsqueeze(-1)
+		x = torch.tensor(x)
 		x = self.pc_embedding(x)
-		y = torch.tensor(y)
+		y = torch.tensor(y).unsqueeze(-1).float()
 		return x, y
 
