@@ -5,7 +5,7 @@ from collections import defaultdict
 import pdb
 
 FC_CONFIG = {
-    'layers': [100, 200, 1],
+    'layers': [100, 200, 400, 1],
     'dropout': 0.2,
 	'feat_map': {'Program Counter' : 0, 'Set': 1, 'Cache Friendly': 2}
 }
@@ -105,7 +105,7 @@ class MLP(Model):
 		self.feat_idx_map = feat_idx_map
 		# TODO [all] - assuming we are concatenating features
 		assert layers[0] % (len(feat_idx_map) - 1) == 0, 'The input dimension should be divisible by # of features'
-		
+		self.layers = layers
 		self.emb_dim = int(layers[0] / (len(feat_idx_map) - 1))
 		sequence = []
 		self.layers = layers
@@ -116,16 +116,53 @@ class MLP(Model):
 		self.model = nn.Sequential(*sequence[:-1])  # [:-1] to remove the last relu
 		self.model.apply(weight_init(init_method))
 	
-	def create_embedder(self, dataset, feat_idx):
-		all_entries = set([b[feat_idx] for b in dataset])
+	def rm_feature(self, feat_name):
+		del self.feat_idx_map[feat_name]
+		self.emb_dim = int(self.layers[0] / (len(self.feat_idx_map) - 1))
+
+	def create_embedder(self, dataset, feat_idx, temporal_order=True):
+		all_entries = [b[feat_idx] for b in dataset]
+		if not temporal_order:
+			all_entries = set(all_entries)
 		counter = 1
 		this_map = defaultdict(int)
 		for id_ in all_entries:
-			this_map[id_] = counter
-			counter += 1
-		embedder = torch.nn.Embedding(counter, self.emb_dim, 0)
+			if id_ not in this_map:
+				this_map[id_] = counter
+				counter += 1
+		embedder = torch.nn.Embedding(max(counter, 500), self.emb_dim, 0) # Making this 2x so there there is slack.
 		return this_map, embedder
-	
+
+	def remap_embedder(self, entries, cntr_max):
+		counter = 1
+		this_map = defaultdict(int)
+		for id_ in entries:
+			if id_ not in this_map:
+				this_map[id_] = counter
+				counter += 1
+			if len(this_map) >= cntr_max - 1:
+				# We are assuming everything that comes after is padding
+				counter = 0
+		return this_map
+
+	def remap_embedders(self, dataset, set_id):
+		if not hasattr(self, 'setid_to_map_map'):
+			self.setid_to_map_map = defaultdict(lambda: {})
+		if 'Program Counter' in self.feat_idx_map:
+			if set_id not in self.setid_to_map_map['Program Counter']:
+				max_emb_cnt = self.pc_embedding.weight.shape[0]
+				feat_idx = self.feat_idx_map['Program Counter']
+				entries = [b[feat_idx] for b in dataset]
+				self.setid_to_map_map['Program Counter'][set_id] = self.remap_embedder(entries, max_emb_cnt)
+			self.pc_emb_map = self.setid_to_map_map['Program Counter'][set_id]
+		if 'Set' in self.feat_idx_map:
+			if set_id not in self.setid_to_map_map['Set']:
+				max_emb_cnt = self.set_embedding.weight.shape[0]
+				feat_idx = self.feat_idx_map['Set']
+				entries = [b[feat_idx] for b in dataset]
+				self.setid_to_map_map['Set'][set_id] = self.remap_embedder(entries, max_emb_cnt)
+			self.set_emb_map = self.setid_to_map_map['Set'][set_id]
+
 	def get_data_columns(self):
 		ncols = len(self.feat_idx_map)
 		col_names = ['' for _ in range(ncols)]
@@ -136,13 +173,13 @@ class MLP(Model):
 			col_names[v] = k
 		return col_names
 
-	def prep_for_data(self, dataset):
+	def prep_for_data(self, dataset, temp_order=True):
 		if 'Program Counter' in self.feat_idx_map:
 			feat_idx = self.feat_idx_map['Program Counter']
-			self.pc_emb_map, self.pc_embedding = self.create_embedder(dataset, feat_idx)
+			self.pc_emb_map, self.pc_embedding = self.create_embedder(dataset, feat_idx, temporal_order=temp_order)
 		if 'Set' in self.feat_idx_map:
 			feat_idx = self.feat_idx_map['Set']
-			self.set_emb_map, self.set_embedding = self.create_embedder(dataset, feat_idx)
+			self.set_emb_map, self.set_embedding = self.create_embedder(dataset, feat_idx, temporal_order=temp_order)
 		# TODO [all] - add to this as more features are introduced
 
 	def format_batch(self, batch):

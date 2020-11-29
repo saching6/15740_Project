@@ -14,9 +14,17 @@ def get_batch_iterator(data, batch_sz, shuffle=True):
     num_pts = len(data)
     perm = np.random.permutation(num_pts)
     perm = perm if shuffle else np.arange(num_pts)
-    num_batches = num_pts // batch_sz
+    num_batches = max(num_pts // batch_sz, 1)
     for i in range(num_batches):
         idxs = perm[(i * batch_sz) : (i + 1) * batch_sz]
         samples = [data[idx_] for idx_ in idxs]
         yield samples
+
+def group_by_set(dataset, set_idx=1):
+	all_sets = dataset[:, set_idx]
+	unique_set_ids = np.unique(all_sets)
+	grouped_data = {}
+	for s_id in unique_set_ids:
+		grouped_data[s_id] = dataset[dataset[:, set_idx] == s_id]
+	return grouped_data
     
