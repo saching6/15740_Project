@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.nn.init import xavier_uniform_, kaiming_uniform_, zeros_, kaiming_normal_
 from collections import defaultdict
 import pdb
@@ -13,12 +14,12 @@ FC_CONFIG = {
 }
 
 TFORMER_CONFIG = {
-	'd_model': 512,
+	'd_model': 128,
 	'n_head': 4,
 	'num_encoder_layers': 3,
-	'dim_feedforward': 1024,
+	'dim_feedforward': 256,
 	'dropout': 0.2,
-	'final_out_sz': 1,
+	'final_out_sz': 2,
 	'pred_window_sz': 32,
 	'batch_size': 16,
 	'feat_map': {'Program Counter' : 0, 'Set': 1, 'Cache Friendly': 2}
@@ -272,6 +273,7 @@ class TFormer(Model):
 		x, y, mask, pos_embed = self.format_batch(batch)
 		x = x + pos_embed  # Add the positional embedding
 		m_out = self.encoder(x, mask)
+		m_out = F.relu(m_out)
 		m_out = self.proj(m_out)
 		# Need to do the right amount of sub-indexing
 		m_out = m_out[-self.pred_window_sz:, :, :]
@@ -281,6 +283,8 @@ class TFormer(Model):
 		if self.loss_fn_name == 'BCE':
 			# We need to do a sigmoid if we're using binary labels
 			m_out = torch.sigmoid(m_out)
+		if self.loss_fn_name == 'CE':
+			y = y.long()
 		loss = self.loss_fn(m_out, y)
 		acc = self.get_accuracy(m_out, y)
 		return loss, acc, bsz
