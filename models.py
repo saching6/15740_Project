@@ -20,7 +20,7 @@ TFORMER_CONFIG = {
 	'dim_feedforward': 256,
 	'dropout': 0.2,
 	'final_out_sz': 2,
-	'pred_window_sz': 32,
+	'pred_window_sz': 5,
 	'batch_size': 16,
 	'feat_map': {'Program Counter' : 0, 'Set': 1, 'Cache Friendly': 2}
 }
@@ -179,6 +179,8 @@ class Model(nn.Module):
 				this_map[id_] = counter
 				counter += 1
 		embedder = torch.nn.Embedding(max(counter, 500), self.emb_dim, 0) # Making this 2x so there there is slack.
+		if torch.cuda.is_available:
+			embedder = embedder.cuda()
 		return this_map, embedder
 
 	def remap_embedder(self, entries, cntr_max):
@@ -243,7 +245,7 @@ class TFormer(Model):
 				x_pc.append(self.pc_emb_map[b[self.feat_idx_map['Program Counter']]])
 			if 'Set' in self.feat_idx_map:
 				x_set.append(self.set_emb_map[b[self.feat_idx_map['Set']]])
-		x_pc = reshape(np.array(x_pc))
+		x_pc = reshape(np.array(x_pc), p_win_sz=self.pred_window_sz)
 		y = reshape(np.array(y), p_win_sz=self.pred_window_sz)
 		mask = gen_bias_mask(x_pc.shape[-1]).squeeze() # After doing the reshaping
 		pos_emb = gen_timing_signal(x_pc.shape[-1], self.emb_dim * (len(self.feat_idx_map) - 1))
@@ -257,7 +259,7 @@ class TFormer(Model):
 		x = torch.transpose(x, 1, 0)
 		y = torch.transpose(y, 1, 0)
 		if len(self.feat_idx_map) == 3:
-			x_set = reshape(np.array(x_set))
+			x_set = reshape(np.array(x_set), p_win_sz=self.pred_window_sz)
 			x_set = torch.tensor(x_set)
 			if self.use_cuda:
 				x_set = x_set.cuda()
