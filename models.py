@@ -14,15 +14,36 @@ FC_CONFIG = {
 }
 
 TFORMER_CONFIG = {
-	'd_model': 128,
+	'd_model': 192,
 	'n_head': 4,
 	'num_encoder_layers': 3,
 	'dim_feedforward': 256,
 	'dropout': 0.2,
 	'final_out_sz': 2,
 	'pred_window_sz': 5,
-	'batch_size': 16,
-	'feat_map': {'Program Counter' : 0, 'Set': 1, 'Cache Friendly': 2}
+	'feat_map': {'Program Counter' : 0, 'Set Occupancy': 1, 'Cache Friendly': 2} #'Set': 1,
+}
+
+TFORMER_CONFIG_1 = {
+	'd_model': 96,
+	'n_head': 2,
+	'num_encoder_layers': 3,
+	'dim_feedforward': 126,
+	'dropout': 0.2,
+	'final_out_sz': 2,
+	'pred_window_sz': 10,
+	'feat_map': {'Program Counter' : 0, 'Set Occupancy': 1, 'Cache Friendly': 2} #'Set': 1,
+}
+
+TFORMER_CONFIG_2 = {
+	'd_model': 384,
+	'n_head': 6,
+	'num_encoder_layers': 3,
+	'dim_feedforward': 256,
+	'dropout': 0.3,
+	'final_out_sz': 2,
+	'pred_window_sz': 10,
+	'feat_map': {'Program Counter' : 0, 'Set Occupancy': 1, 'Cache Friendly': 2} #'Set': 1,
 }
 
 def reshape(x, p_win_sz=32):
@@ -70,8 +91,13 @@ def get_model(model_type, **kwargs):
 						kwargs['layers'], dp_ratio=kwargs['dropout'],
 						loss_name=loss_name, feat_idx_map=kwargs['feat_map']
 					)
-	elif model_type == 'TRANSFORMER':
-		kwargs = TFORMER_CONFIG
+	elif 'TRANSFORMER' in model_type:
+		if '1' in model_type:
+			kwargs = TFORMER_CONFIG_1
+		elif '2' in model_type:
+			kwargs = TFORMER_CONFIG_2
+		else:
+			kwargs = TFORMER_CONFIG
 		kwargs['loss_name'] = 'CE' if kwargs['final_out_sz'] != 1 else 'BCE'
 		model = TFormer(**kwargs)
 	return model
@@ -212,6 +238,7 @@ class Model(nn.Module):
 				entries = [b[feat_idx] for b in dataset]
 				self.setid_to_map_map['Set'][set_id] = self.remap_embedder(entries, max_emb_cnt)
 			self.set_emb_map = self.setid_to_map_map['Set'][set_id]
+		# We are assuming that the set occupancy map is shared accross all sets
 
 
 	def prep_for_data(self, dataset, temp_order=True):
@@ -221,6 +248,9 @@ class Model(nn.Module):
 		if 'Set' in self.feat_idx_map:
 			feat_idx = self.feat_idx_map['Set']
 			self.set_emb_map, self.set_embedding = self.create_embedder(dataset, feat_idx, temporal_order=temp_order)
+		if 'Set Occupancy' in self.feat_idx_map:
+			feat_idx = self.feat_idx_map['Set Occupancy']
+			self.set_occ_emb_map, self.set_occ_embedding = self.create_embedder(dataset, feat_idx, temporal_order=temp_order)
 		# TODO [all] - add to this as more features are introduced
 
 class TFormer(Model):
@@ -234,10 +264,13 @@ class TFormer(Model):
 		encoder_norm = torch.nn.LayerNorm(kwargs['d_model'])
 		self.encoder = torch.nn.TransformerEncoder(encoder_layer, kwargs['num_encoder_layers'], encoder_norm)
 		self.proj = nn.Linear(kwargs['d_model'], kwargs['final_out_sz'])
+		# Adding for the reuse-distance
+# 		self.proj_reuse = nn.Linear(kwargs['d_model'], kwargs['reuse_out_sz'])
 		self.pred_window_sz = kwargs['pred_window_sz']
 
 	def format_batch(self, batch):
 		x_pc, x_set, y = [], [], []
+		x_set_occ = []
 		for b in batch:
 			y.append(b[-1])
 			# Convert the program counter to an embedding
@@ -245,6 +278,8 @@ class TFormer(Model):
 				x_pc.append(self.pc_emb_map[b[self.feat_idx_map['Program Counter']]])
 			if 'Set' in self.feat_idx_map:
 				x_set.append(self.set_emb_map[b[self.feat_idx_map['Set']]])
+			if 'Set Occupancy' in self.feat_idx_map:
+				x_set_occ.append(self.set_occ_emb_map[b[self.feat_idx_map['Set Occupancy']]])
 		x_pc = reshape(np.array(x_pc), p_win_sz=self.pred_window_sz)
 		y = reshape(np.array(y), p_win_sz=self.pred_window_sz)
 		mask = gen_bias_mask(x_pc.shape[-1]).squeeze() # After doing the reshaping
@@ -257,8 +292,8 @@ class TFormer(Model):
 		x = self.pc_embedding(x)
 		y = torch.tensor(y).float()
 		x = torch.transpose(x, 1, 0)
-		y = torch.transpose(y, 1, 0)
-		if len(self.feat_idx_map) == 3:
+		y = torch.transpose(x, 1, 0)
+		if 'Set' in self.feat_idx_map:
 			x_set = reshape(np.array(x_set), p_win_sz=self.pred_window_sz)
 			x_set = torch.tensor(x_set)
 			if self.use_cuda:
@@ -266,6 +301,14 @@ class TFormer(Model):
 			x_set = self.set_embedding(x_set)
 			x_set = torch.transpose(x_set, 1, 0)
 			x = torch.cat([x, x_set], dim=-1)
+		if 'Set Occupancy' in self.feat_idx_map:
+			x_set_occ = reshape(np.array(x_set_occ), p_win_sz=self.pred_window_sz)
+			x_set_occ = torch.tensor(x_set_occ)
+			if self.use_cuda:
+				x_set_occ = x_set_occ.cuda()
+			x_set_occ = self.set_occ_embedding(x_set_occ)
+			x_set_occ = torch.transpose(x_set_occ, 1, 0)
+			x = torch.cat([x, x_set_occ], dim=-1)
 		if self.use_cuda:
 			x, y, mask, pos_emb = x.cuda(), y.cuda(), mask.cuda(), pos_emb.cuda()
 		return x, y, mask, pos_emb
