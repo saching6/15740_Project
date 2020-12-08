@@ -10,7 +10,9 @@ def belady( df ):
 
     reuse_dict = {}
 
-    cache = -1 * np.ones( ( sets, ways ), dtype=np.float128 )
+    cache = -1 * np.ones( ( sets, ways ), dtype=np.float64 )
+    cache = cache.astype( str )
+
     cache_hist = -1 * np.ones( ( df.shape[0], ways ), dtype=np.float128 )
     reuse_dist = np.zeros( ( df.shape[0], ways ) )
 
@@ -22,16 +24,31 @@ def belady( df ):
         which_set = df['Set'][i]
         paddr = df['Physical Address'][i]
 
-        if paddr in cache[which_set]:
+        if str( paddr ) in cache[which_set]:
             hit[i] = 1
+            
+            bel = np.zeros( ways )
+            for j, way in enumerate( cache[which_set] ):
+                if np.float64( way ) > 0:
+                    way_reuse = np.where( df['Physical Address'][i+1:] == np.float64( way ) )[0]
+                
+                    if len( way_reuse ) == 0:
+                        bel[j] = np.inf
+                    else:
+                        bel[j] = way_reuse[0]
+                        reuse_dict[way] = way_reuse[1:]
+
+            reuse_dist[i,:] = bel.tolist()
+            cache_hist[i,:] = cache[which_set].tolist()
+    
         else:
             bel = np.zeros( ways )
             for j, way in enumerate( cache[which_set] ):
-                if way < 0:
+                if np.float64( way ) < 0:
                     #If the cache hasn't been filled, 
                     #put it in the cache and mark it friendly
 
-                    cache[which_set,j] = paddr
+                    cache[which_set,j] = str( paddr )
                     friendly[i] = 1
  
                     way_reuse = np.where( df['Physical Address'][i+1:] == paddr )[0]
@@ -50,7 +67,7 @@ def belady( df ):
                         way_reuse -= way_reuse[0]
                 else:
                 """
-                way_reuse = np.where( df['Physical Address'][i+1:] == way )[0]
+                way_reuse = np.where( df['Physical Address'][i+1:] == np.float64( way ) )[0]
                 
                 if len( way_reuse ) == 0:
                     bel[j] = np.inf
@@ -85,7 +102,7 @@ def belady( df ):
                     evict_addr[i] = cache[which_set,replace]
                     bel[replace] = next_reuse
                     reuse_dist[i,replace] = next_reuse
-                    cache[which_set,replace] = paddr
+                    cache[which_set,replace] = str( paddr )
         
             reuse_dist[i,:] = bel.tolist()
             cache_hist[i,:] = cache[which_set].tolist()

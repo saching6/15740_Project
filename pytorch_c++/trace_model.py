@@ -30,7 +30,7 @@ def load_model( fname ):
     model.load_state_dict(torch.load( fname, map_location=torch.device('cpu')))
 
     model.eval()
-    return model
+    return model, train_setwise_dataset[max_key][:32]
 
 def main( ):
     parser = argparse.ArgumentParser(description="Select torch model to convert")
@@ -42,9 +42,12 @@ def main( ):
         )
     args = parser.parse_args()
 
-    model = load_model( args.file )
-    loss, acc, bsz = model.forward( np.zeros( ( 64, 3 ) ) )
-    for val in [ loss, acc.item(), bsz ]:
-        print( val )
+    model, example = load_model( args.file )
+    example = torch.from_numpy( example )
 
+    traced_script_module = torch.jit.trace( model, example )
+    traced_script_module.save( "traced_{}".format( args.file ) )
+
+    #m_out = model.forward( np.zeros( ( 32, 3 ) ) )
+    #print( m_out.argmax( dim=-1 ) )
 main()
