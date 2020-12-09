@@ -8,9 +8,15 @@ import numpy as np
 import math
 
 FC_CONFIG = {
-    'layers': [100, 200, 400, 1],
+    'layers': [192, 400, 2],
     'dropout': 0.2,
-	'feat_map': {'Program Counter' : 0, 'Set': 1, 'Belady Friendly': 2}
+	'feat_map': {'Program Counter' : 0, 'Set Occupancy': 1, 'Belady Friendly': 2} #'Set': 1,
+}
+
+STUDENT_CONFIG = {
+    'layers': [192,300, 2],
+    'dropout': 0.2,
+	'feat_map': {'Program Counter' : 0, 'Set Occupancy': 1, 'Belady Friendly': 2} #'Set': 1,
 }
 
 TFORMER_CONFIG = {
@@ -75,6 +81,15 @@ def get_model(model_type, **kwargs):
 	# TODO [All] - we need to implement the individual functions
 	if model_type == 'FC':
 		kwargs = FC_CONFIG
+		assert 'layers' in kwargs, 'Need to specify layers for MLP model'
+		assert 'dropout' in kwargs, 'Need to specify dropout for MLP model'
+		loss_name = 'CE' if kwargs['layers'][-1] != 1 else 'BCE'
+		model = MLP(
+						kwargs['layers'], dp_ratio=kwargs['dropout'],
+						loss_name=loss_name, feat_idx_map=kwargs['feat_map']
+					)
+	elif model_type == 'SFC':
+		kwargs = STUDENT_CONFIG
 		assert 'layers' in kwargs, 'Need to specify layers for MLP model'
 		assert 'dropout' in kwargs, 'Need to specify dropout for MLP model'
 		loss_name = 'CE' if kwargs['layers'][-1] != 1 else 'BCE'
@@ -148,7 +163,9 @@ class Model(nn.Module):
 			m_out = torch.sigmoid(m_out)
 		loss = self.loss_fn(m_out, y)
 		acc = self.get_accuracy(m_out, y)
-		return loss, acc, len(y)
+		y=y.long().squeeze()
+		return loss, acc, len(y),m_out,y
+# 		return loss, acc, len(y)
 
 	def get_accuracy(self, pred, targets):
 		with torch.no_grad():
@@ -330,7 +347,9 @@ class TFormer(Model):
 			y = y.long()
 		loss = self.loss_fn(m_out, y)
 		acc = self.get_accuracy(m_out, y)
-		return loss, acc, bsz
+		y=y.long().squeeze()
+		return loss, acc, bsz,m_out,y
+# 		return loss, acc, bsz
 
 	def forward_( self, x, mask, pos_embed ):
 			x += pos_embed
@@ -368,12 +387,9 @@ class MLP(Model):
 		self.model.apply(weight_init(init_method))
 
 
-
 	def format_batch(self, batch):
-		# TODO [ldery]
-		# NOTE : ASSUMING THE LAST INDEX IS THE TARGET
-		assert hasattr(self, 'pc_emb_map'), 'This model should have an embedding map for pc'
 		x_pc, x_set, y = [], [], []
+		x_set_occ = []
 		for b in batch:
 			y.append(b[-1])
 			# Convert the program counter to an embedding
@@ -381,13 +397,26 @@ class MLP(Model):
 				x_pc.append(self.pc_emb_map[b[self.feat_idx_map['Program Counter']]])
 			if 'Set' in self.feat_idx_map:
 				x_set.append(self.set_emb_map[b[self.feat_idx_map['Set']]])
-		x = torch.tensor(x_pc)
+			if 'Set Occupancy' in self.feat_idx_map:
+				x_set_occ.append(self.set_occ_emb_map[b[self.feat_idx_map['Set Occupancy']]])
+		if self.use_cuda:
+			x = torch.tensor(x_pc).cuda()
+		else:
+			x = torch.tensor(x_pc)
 		x = self.pc_embedding(x)
-		y = torch.tensor(y).unsqueeze(-1).float()
-		# TODO [ldery / all] - this is not neat - figure out a better way to do this
-		if len(self.feat_idx_map) == 2:
-			return x, y
-		elif len(self.feat_idx_map) == 3:
-			x_set = self.set_embedding(torch.tensor(x_set))
+		y = torch.tensor(y).float()
+		if 'Set' in self.feat_idx_map:
+			x_set = torch.tensor(x_set)
+			if self.use_cuda:
+				x_set = x_set.cuda()
+			x_set = self.set_embedding(x_set)
 			x = torch.cat([x, x_set], dim=-1)
+		if 'Set Occupancy' in self.feat_idx_map:
+			x_set_occ = torch.tensor(x_set_occ)
+			if self.use_cuda:
+				x_set_occ = x_set_occ.cuda()
+			x_set_occ = self.set_occ_embedding(x_set_occ)
+			x = torch.cat([x, x_set_occ], dim=-1)
+		if self.use_cuda:
+			x, y = x.cuda(), y.cuda()
 		return x, y
