@@ -13,6 +13,12 @@ FC_CONFIG = {
 	'feat_map': {'Program Counter' : 0, 'Set Occupancy': 1, 'Belady Friendly': 2} #'Set': 1,
 }
 
+STUDENT_CONFIG = {
+    'layers': [192,300, 2],
+    'dropout': 0.2,
+	'feat_map': {'Program Counter' : 0, 'Set Occupancy': 1, 'Belady Friendly': 2} #'Set': 1,
+}
+
 TFORMER_CONFIG = {
 	'd_model': 192,
 	'n_head': 4,
@@ -91,6 +97,15 @@ def get_model(model_type, **kwargs):
 						kwargs['layers'], dp_ratio=kwargs['dropout'],
 						loss_name=loss_name, feat_idx_map=kwargs['feat_map']
 					)
+	elif model_type == 'SFC':
+		kwargs = STUDENT_CONFIG
+		assert 'layers' in kwargs, 'Need to specify layers for MLP model'
+		assert 'dropout' in kwargs, 'Need to specify dropout for MLP model'
+		loss_name = 'CE' if kwargs['layers'][-1] != 1 else 'BCE'
+		model = MLP(
+						kwargs['layers'], dp_ratio=kwargs['dropout'],
+						loss_name=loss_name, feat_idx_map=kwargs['feat_map']
+					)
 	elif 'TRANSFORMER' in model_type:
 		if '1' in model_type:
 			kwargs = TFORMER_CONFIG_1
@@ -158,7 +173,9 @@ class Model(nn.Module):
 			m_out = torch.sigmoid(m_out)
 		loss = self.loss_fn(m_out, y)
 		acc = self.get_accuracy(m_out, y)
-		return loss, acc, len(y)
+		y=y.long().squeeze()
+		return loss, acc, len(y),m_out,y
+# 		return loss, acc, len(y)
 
 	def get_accuracy(self, pred, targets):
 		with torch.no_grad():
@@ -332,7 +349,9 @@ class TFormer(Model):
 			y = y.long()
 		loss = self.loss_fn(m_out, y)
 		acc = self.get_accuracy(m_out, y)
-		return loss, acc, bsz
+		y=y.long().squeeze()
+		return loss, acc, bsz,m_out,y
+# 		return loss, acc, bsz
 
 class MLP(Model):
 	def __init__(
