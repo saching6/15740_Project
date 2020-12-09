@@ -28,10 +28,10 @@ TFORMER_CONFIG_1 = {
 	'd_model': 96,
 	'n_head': 2,
 	'num_encoder_layers': 3,
-	'dim_feedforward': 126,
+	'dim_feedforward': 128,
 	'dropout': 0.2,
 	'final_out_sz': 2,
-	'pred_window_sz': 10,
+	'pred_window_sz': 8,
 	'feat_map': {'Program Counter' : 0, 'Set Occupancy': 1, 'Belady Friendly': 2} #'Set': 1,
 }
 
@@ -42,7 +42,7 @@ TFORMER_CONFIG_2 = {
 	'dim_feedforward': 256,
 	'dropout': 0.3,
 	'final_out_sz': 2,
-	'pred_window_sz': 10,
+	'pred_window_sz': 8,
 	'feat_map': {'Program Counter' : 0, 'Set Occupancy': 1, 'Belady Friendly': 2} #'Set': 1,
 }
 
@@ -282,7 +282,6 @@ class TFormer(Model):
 				x_set_occ.append(self.set_occ_emb_map[b[self.feat_idx_map['Set Occupancy']]])
 		x_pc = reshape(np.array(x_pc), p_win_sz=self.pred_window_sz)
 		y = reshape(np.array(y), p_win_sz=self.pred_window_sz)
-		pdb.set_trace()
 		mask = gen_bias_mask(x_pc.shape[-1]).squeeze() # After doing the reshaping
 		pos_emb = gen_timing_signal(x_pc.shape[-1], self.emb_dim * (len(self.feat_idx_map) - 1))
 		pos_emb = torch.transpose(pos_emb, 1, 0)
