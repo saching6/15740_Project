@@ -10,7 +10,7 @@ import math
 FC_CONFIG = {
     'layers': [100, 200, 400, 1],
     'dropout': 0.2,
-	'feat_map': {'Program Counter' : 0, 'Set': 1, 'Cache Friendly': 2}
+	'feat_map': {'Program Counter' : 0, 'Set': 1, 'Belady Friendly': 2}
 }
 
 TFORMER_CONFIG = {
@@ -21,7 +21,7 @@ TFORMER_CONFIG = {
 	'dropout': 0.2,
 	'final_out_sz': 2,
 	'pred_window_sz': 5,
-	'feat_map': {'Program Counter' : 0, 'Set Occupancy': 1, 'Cache Friendly': 2} #'Set': 1,
+	'feat_map': {'Program Counter' : 0, 'Set Occupancy': 1, 'Belady Friendly': 2} #'Set': 1,
 }
 
 TFORMER_CONFIG_1 = {
@@ -32,7 +32,7 @@ TFORMER_CONFIG_1 = {
 	'dropout': 0.2,
 	'final_out_sz': 2,
 	'pred_window_sz': 10,
-	'feat_map': {'Program Counter' : 0, 'Set Occupancy': 1, 'Cache Friendly': 2} #'Set': 1,
+	'feat_map': {'Program Counter' : 0, 'Set Occupancy': 1, 'Belady Friendly': 2} #'Set': 1,
 }
 
 TFORMER_CONFIG_2 = {
@@ -43,7 +43,7 @@ TFORMER_CONFIG_2 = {
 	'dropout': 0.3,
 	'final_out_sz': 2,
 	'pred_window_sz': 10,
-	'feat_map': {'Program Counter' : 0, 'Set Occupancy': 1, 'Cache Friendly': 2} #'Set': 1,
+	'feat_map': {'Program Counter' : 0, 'Set Occupancy': 1, 'Belady Friendly': 2} #'Set': 1,
 }
 
 def reshape(x, p_win_sz=32):
@@ -282,6 +282,7 @@ class TFormer(Model):
 				x_set_occ.append(self.set_occ_emb_map[b[self.feat_idx_map['Set Occupancy']]])
 		x_pc = reshape(np.array(x_pc), p_win_sz=self.pred_window_sz)
 		y = reshape(np.array(y), p_win_sz=self.pred_window_sz)
+		pdb.set_trace()
 		mask = gen_bias_mask(x_pc.shape[-1]).squeeze() # After doing the reshaping
 		pos_emb = gen_timing_signal(x_pc.shape[-1], self.emb_dim * (len(self.feat_idx_map) - 1))
 		pos_emb = torch.transpose(pos_emb, 1, 0)
@@ -292,7 +293,7 @@ class TFormer(Model):
 		x = self.pc_embedding(x)
 		y = torch.tensor(y).float()
 		x = torch.transpose(x, 1, 0)
-		y = torch.transpose(x, 1, 0)
+		y = torch.transpose(y, 1, 0)
 		if 'Set' in self.feat_idx_map:
 			x_set = reshape(np.array(x_set), p_win_sz=self.pred_window_sz)
 			x_set = torch.tensor(x_set)
