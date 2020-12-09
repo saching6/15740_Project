@@ -14,14 +14,14 @@ FC_CONFIG = {
 }
 
 TFORMER_CONFIG = {
-	'd_model': 192,
+	'd_model': 128,
 	'n_head': 4,
 	'num_encoder_layers': 3,
 	'dim_feedforward': 256,
 	'dropout': 0.2,
 	'final_out_sz': 2,
 	'pred_window_sz': 5,
-	'feat_map': {'Program Counter' : 0, 'Set Occupancy': 1, 'Belady Friendly': 2} #'Set': 1,
+	'feat_map': {'Program Counter' : 0, 'Set': 1, 'Belady Friendly': 2} #'Set': 1,
 }
 
 TFORMER_CONFIG_1 = {
@@ -47,20 +47,11 @@ TFORMER_CONFIG_2 = {
 }
 
 def reshape(x, p_win_sz=32):
-	d = x.shape[0]
-	# Truncate the array to make it divisible by p_win_sz * 2
-	if np.mod( d, p_win_sz*2 ) > 0:
-		x = x[:-np.mod( d, p_win_sz*2 )]
-	#get the largest section of the array starting at i that is divisible by p_win_sz * 2
-	g = lambda x_, i: x_[ i :- ( 2 * p_win_sz - np.mod( i, 2 * p_win_sz ) ) ]
-	#Reshape the array to shape (p_win_sz*2,:)
-	f = lambda x_, i: g( x_, i ).reshape(
-			int( g( x_, i ).shape[0] / ( 2 * p_win_sz ) ),
-			2 * p_win_sz
-	)
-	#Get all via list comprehension
-	res = [ f( x, i ) for i in range( p_win_sz * 2  ) ]
-	return np.vstack(res)
+#	if not torch.is_tensor( x ):
+#		x = torch.tensor( x )
+	d = p_win_sz * 2
+	x_stack = [ x.narrow( 0, i, d ) for i in range( 0, x.numel() - d + 1 ) ]
+	return torch.stack( x_stack, axis=-1 )
 
 # Weight initialization
 def weight_init(init_method):
@@ -106,16 +97,15 @@ def gen_bias_mask(max_length):
 	"""
 	Generates bias values (-Inf) to mask future timesteps during attention
 	"""
-	np_mask = np.triu(np.full([max_length, max_length], -np.inf), 1)
-	torch_mask = torch.from_numpy(np_mask).type(torch.FloatTensor)
 
+	torch_mask = torch.triu(torch.full([max_length, max_length], -float('inf')))
 	return torch_mask.unsqueeze(0).unsqueeze(1)
 
 def gen_timing_signal(length, channels, min_timescale=1.0, max_timescale=1.0e4):
 	"""
 	Generates a [1, length, channels] timing signal consisting of sinusoids
 	"""
-	position = np.arange(length)
+	position = torch.arange(length)
 	num_timescales = channels // 2
 	log_timescale_increment = (
 					math.log(float(max_timescale) / float(min_timescale)) /
@@ -205,7 +195,7 @@ class Model(nn.Module):
 				this_map[id_] = counter
 				counter += 1
 		embedder = torch.nn.Embedding(max(counter, 500), self.emb_dim, 0) # Making this 2x so there there is slack.
-		if torch.cuda.is_available:
+		if torch.cuda.is_available():
 			embedder = embedder.cuda()
 		return this_map, embedder
 
@@ -269,20 +259,28 @@ class TFormer(Model):
 		self.pred_window_sz = kwargs['pred_window_sz']
 
 	def format_batch(self, batch):
-		x_pc, x_set, y = [], [], []
-		x_set_occ = []
-		for b in batch:
-			y.append(b[-1])
+		x_pc = torch.zeros( batch.shape[0] ) 
+		x_set = torch.zeros( batch.shape[0] )   
+		x_set_occ = torch.zeros( batch.shape[0] )   
+		y = torch.zeros( batch.shape[0] )  
+
+		for i, b in enumerate( batch ):
+			y[i] = b[-1]
 			# Convert the program counter to an embedding
 			if 'Program Counter' in self.feat_idx_map:
-				x_pc.append(self.pc_emb_map[b[self.feat_idx_map['Program Counter']]])
+				x_pc[i] = self.pc_emb_map[b[self.feat_idx_map['Program Counter']]]
+
 			if 'Set' in self.feat_idx_map:
-				x_set.append(self.set_emb_map[b[self.feat_idx_map['Set']]])
+				x_set[i] =  self.set_emb_map[b[self.feat_idx_map['Set']]]
+                
 			if 'Set Occupancy' in self.feat_idx_map:
-				x_set_occ.append(self.set_occ_emb_map[b[self.feat_idx_map['Set Occupancy']]])
-		x_pc = reshape(np.array(x_pc), p_win_sz=self.pred_window_sz)
-		y = reshape(np.array(y), p_win_sz=self.pred_window_sz)
+				x_set_occ[i] = self.set_occ_emb_map[b[self.feat_idx_map['Set Occupancy']]]
+		x_pc = reshape(x_pc, p_win_sz=self.pred_window_sz)
+		y = reshape(y, p_win_sz=self.pred_window_sz)
+
+
 		mask = gen_bias_mask(x_pc.shape[-1]).squeeze() # After doing the reshaping
+		print( "---- So Far So Good ----" )
 		pos_emb = gen_timing_signal(x_pc.shape[-1], self.emb_dim * (len(self.feat_idx_map) - 1))
 		pos_emb = torch.transpose(pos_emb, 1, 0)
 		if self.use_cuda:
@@ -333,6 +331,19 @@ class TFormer(Model):
 		loss = self.loss_fn(m_out, y)
 		acc = self.get_accuracy(m_out, y)
 		return loss, acc, bsz
+
+	def forward_( self, x, mask, pos_embed ):
+			x += pos_embed
+			m_out = self.encoder( x, mask )
+			m_out = F.relu( m_out )
+			m_out = self.proj( m_out )
+
+			m_out = m_out[-self.pred_window_sz:, :, :]
+			m_out = m_out.view( -1, m_out.shape[-1] )
+			if self.loss_fun_name == 'BCE':
+				m_out = torch.sigmoid( m_out )
+            
+			return m_out
 
 class MLP(Model):
 	def __init__(
