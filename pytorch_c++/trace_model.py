@@ -11,7 +11,7 @@ from models import get_model
 from dataformatter import csv_to_data
 from dataformatter import group_by_set
 
-DATA_PATH = "../hawkeye_trace_belady_graph.csv"
+DATA_PATH = "../hawkeye_trace_belady.csv"
 print( torch.cuda.is_available() )
 
 def load_model( fname ):

@@ -28,7 +28,7 @@ def csv_to_data(fname, chosen_columns=['Program Counter', 'Set', 'Set Occupancy'
 		for chosen_col in chosen_columns:
 			if chosen_col == 'Set Occupancy':
 				all_cols.append(set_infos)
-			else:
+			else:        
 				all_cols.append(df_npy[:, header_names.index(chosen_col), None])
 		cols = np.hstack(all_cols)
 	else:
