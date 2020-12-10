@@ -32,6 +32,7 @@ class VanillaKD(BaseClass):
 		dataset,
 		batch_size,
 		shuffle,
+		student_type="SFC",
 		loss_fn=nn.MSELoss(),
 		temp=20.0,
 		distil_weight=0.5,
@@ -45,6 +46,7 @@ class VanillaKD(BaseClass):
 			dataset,
 			batch_size,
 			shuffle,
+			student_type,
 			loss_fn,
 			temp,
 			distil_weight,
@@ -62,11 +64,6 @@ class VanillaKD(BaseClass):
 
 		soft_teacher_out = F.softmax(y_pred_teacher / self.temp, dim=1)
 		soft_student_out = F.softmax(y_pred_student / self.temp, dim=1)
-		
-# 		y_pred_student=y_pred_student.squeeze()
-# 		y_pred_teacher=y_pred_teacher.squeeze()
-# 		y_true=y_true.squeeze()
-
 		
 		
 		loss = (1 - self.distil_weight) * F.cross_entropy(y_pred_student, y_true)

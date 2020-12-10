@@ -2,10 +2,12 @@ import torch
 import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 from dataformatter import *
+import pdb
 
 import matplotlib.pyplot as plt
 from copy import deepcopy
 import os
+MAX_GRAD_NORM=0.1
 
 class BaseClass:
 	"""
@@ -31,6 +33,7 @@ class BaseClass:
 		dataset,
 		batch_size,
 		shuffle,
+		student_type='SFC',
 		loss_fn=nn.KLDivLoss(),
 		temp=20.0,
 		distil_weight=0.5,
@@ -45,22 +48,13 @@ class BaseClass:
 		self.temp = temp
 		self.batch_size=batch_size
 		self.shuffle=shuffle
+		self.student_type=student_type
 		self.distil_weight = distil_weight
-
-		try:
-			torch.Tensor(0).to(device)
-			self.device = device
-		except:
-			print(
-				"Either an invalid device or CUDA is not available. Defaulting to CPU."
-			)
-			self.device = torch.device("cpu")
-
-		try:
-			self.teacher_model = teacher_model.to(self.device)
-		except:
-			print("Warning!!! Teacher is NONE.")
+		if torch.cuda.is_available():
+			self.device="cuda"
+        
 		self.student_model = student_model.to(self.device)
+		self.teacher_model = teacher_model.to(self.device)
 		try:
 			self.loss_fn = loss_fn.to(self.device)
 			self.ce_fn = nn.CrossEntropyLoss().to(self.device)
@@ -69,23 +63,16 @@ class BaseClass:
 			self.ce_fn = nn.CrossEntropyLoss()
 			print("Warning: Loss Function can't be moved to device.")
 
+	def reshape(self,x, p_win_sz=32):
+		if not torch.is_tensor( x ):
+			x = torch.tensor( x )
+		d = p_win_sz * 2
+		x_stack=[]
+		for i in range( 0, x.shape[0] - d + 1 ):
+			x_stack += [x.narrow( 0, i, d )  ]
+# 			print(i,x_stack[-1].shape)
+		return torch.stack( x_stack, axis=-1 )
 
-
-	def run_epoch_student():
-		num_egs = 0
-		for batch in data_iterator:
-			loss, acc, bsz, m_out = model(batch)
-			stats.append([loss.item(), acc.item()])
-			num_egs += bsz
-			if mode == 'train':
-				optimizer.zero_grad()
-				loss.backward()
-				nn.utils.clip_grad_norm_(model.parameters(), MAX_GRAD_NORM)
-				optimizer.step()
-		stats = np.array(stats)
-		avg_loss = np.mean(stats[:, 0])
-		avg_acc = (stats[:, 1]).sum() / num_egs
-		return avg_loss, avg_acc
 	def _train_student(
 		self,
 		epochs=10
@@ -99,29 +86,52 @@ class BaseClass:
 		"""
 		self.teacher_model.eval()
 		self.student_model.train()
+        
 		loss_arr = []
 		print("Training Student...")
 		stats = []
 		for epoch_ in range(epochs):
+			if(epoch_>(epochs/2)):
+				self.distil_weight=0.5
 			accs = []
+			teacher_accs=[]
+			
 			setwise_keys = list(self.setwise_dataset.keys())
 			perm = np.random.permutation(len(setwise_keys))
 			setwise_keys = np.array(setwise_keys)[perm]
+			
 			for set_id  in setwise_keys:
 				dataset = self.setwise_dataset[set_id]
 				self.student_model.remap_embedders(dataset, set_id)
 				self.teacher_model.remap_embedders(dataset, set_id)
 				data_iterator = get_batch_iterator(dataset, self.batch_size, shuffle=self.shuffle)
 				for batch in data_iterator:
-					student_out= self.student_model(batch)
-					teacher_out = self.teacher_model(batch)
+					loss_t, acc_t,_,teacher_out,label,pred_window_size = self.teacher_model(batch)
+					acc_t=acc_t/label.shape[-1]
+					
+					if(self.student_type=="SFC"):
+						loss_s, acc_s,_,student_out,_= self.student_model(batch)
+						student_out = self.reshape(student_out, p_win_sz=pred_window_size)
+						student_out = student_out.permute(2, 0, 1)
+						student_out = student_out[-pred_window_size:, :, :]
+						student_out = student_out.reshape(-1, student_out.shape[-1])
+						acc_s=student_out.argmax(dim=-1).eq(label).sum()
+					else:
+						loss_s, acc_s,_,student_out,_,_= self.student_model(batch)
+					
+					acc_s=acc_s/label.shape[-1]
+					
 					distill_loss = self.calculate_kd_loss(student_out, teacher_out, label.long())
-					pred = student_out.argmax(dim=1, keepdim=True)
+# 					pred = student_out.argmax(dim=1, keepdim=True)
 	# 				correct += pred.eq(label.view_as(pred)).sum().item()
 					self.optimizer_student.zero_grad()
 					distill_loss.backward()
+					nn.utils.clip_grad_norm_(self.student_model.parameters(), MAX_GRAD_NORM)
 					self.optimizer_student.step()
-			print("Epoch: {} | Distillation Loss: {}".format(epoch_,distill_loss.item()))
+					accs+=[acc_s.item()]
+					teacher_accs+=[acc_t.item()]
+			print("Epoch: {} | Student Average Accuracy:{} Student Median Accuracy:{} |Distillation Loss: {}".format(epoch_,np.mean(accs),np.median(accs),distill_loss.item()))
+			print("Epoch: {} | Teacher Average Accuracy:{} Teacher Median Accuracy:{} ".format(epoch_,np.mean(teacher_accs),np.median(teacher_accs),distill_loss.item()))
 
 				
 # 			acc_stats = np.min(accs), np.mean(accs), np.median(accs), np.max(accs)
@@ -200,23 +210,23 @@ class BaseClass:
 
 		return accuracy
 
-	def get_parameters(self):
-		"""
-		Get the number of parameters for the teacher and the student network
-		"""
-		teacher_params = sum(p.numel() for p in self.teacher_model.parameters())
-		student_params = sum(p.numel() for p in self.student_model.parameters())
+# 	def get_parameters(self):
+# 		"""
+# 		Get the number of parameters for the teacher and the student network
+# 		"""
+# 		teacher_params = sum(p.numel() for p in self.teacher_model.parameters())
+# 		student_params = sum(p.numel() for p in self.student_model.parameters())
 
-		print("-" * 80)
-		print(f"Total parameters for the teacher network are: {teacher_params}")
-		print(f"Total parameters for the student network are: {student_params}")
+# 		print("-" * 80)
+# 		print(f"Total parameters for the teacher network are: {teacher_params}")
+# 		print(f"Total parameters for the student network are: {student_params}")
 
-	def post_epoch_call(self, epoch):
-		"""
-		Any changes to be made after an epoch is completed.
+# 	def post_epoch_call(self, epoch):
+# 		"""
+# 		Any changes to be made after an epoch is completed.
 
-		:param epoch (int) : current epoch number
-		:return            : nothing (void)
-		"""
+# 		:param epoch (int) : current epoch number
+# 		:return            : nothing (void)
+# 		"""
 
-		pass
+# 		pass

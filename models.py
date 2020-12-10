@@ -9,17 +9,27 @@ import math
 from positional_embeddings import SinusoidalPositionalEmbedding
 
 FC_CONFIG = {
-    'layers': [192, 400, 2],
+    'layers': [128, 400, 2],
     'dropout': 0.2,
 	'feat_map': {'Program Counter' : 0, 'Set Occupancy': 1, 'Belady Friendly': 2} #'Set': 1,
 }
 
 STUDENT_CONFIG = {
-    'layers': [192,300, 2],
+    'layers': [128, 2],
     'dropout': 0.2,
 	'feat_map': {'Program Counter' : 0, 'Set Occupancy': 1, 'Belady Friendly': 2} #'Set': 1,
 }
 
+STUDENT_TFORMER_CONFIG = {
+	'd_model': 128,
+	'n_head': 2,
+	'num_encoder_layers': 2,
+	'dim_feedforward': 200,
+	'dropout': 0.2,
+	'final_out_sz': 2,
+	'pred_window_sz': 5,
+	'feat_map': {'Program Counter' : 0, 'Set Occupancy': 1, 'Belady Friendly': 2} #'Set': 1,
+} 
 TFORMER_CONFIG = {
 	'd_model': 128,
 	'n_head': 4,
@@ -28,8 +38,8 @@ TFORMER_CONFIG = {
 	'dropout': 0.2,
 	'final_out_sz': 2,
 	'pred_window_sz': 5,
-	'feat_map': {'Program Counter' : 0, 'Set': 1, 'Belady Friendly': 2} #'Set': 1,
-}
+	'feat_map': {'Program Counter' : 0, 'Set Occupancy': 1, 'Belady Friendly': 2} #'Set': 1,
+} 
 
 TFORMER_CONFIG_1 = {
 	'd_model': 96,
@@ -98,6 +108,10 @@ def get_model(model_type, **kwargs):
 						kwargs['layers'], dp_ratio=kwargs['dropout'],
 						loss_name=loss_name, feat_idx_map=kwargs['feat_map']
 					)
+	elif model_type == 'ST' :
+		kwargs = STUDENT_TFORMER_CONFIG
+		kwargs['loss_name'] = 'CE' if kwargs['final_out_sz'] != 1 else 'BCE'
+		model = TFormer(**kwargs)
 	elif 'TRANSFORMER' in model_type:
 		if '1' in model_type:
 			kwargs = TFORMER_CONFIG_1
@@ -157,15 +171,15 @@ class Model(nn.Module):
 
 	def forward(self, batch):
 		x, y = self.format_batch(batch)
-		print(x.is_cuda,y.is_cuda,self.pc_embedding.weight.is_cuda)
 		# Assumes the data has already been formatted appropriately
 		m_out = self.model(x)
 		if self.loss_fn_name == 'BCE':
 			# We need to do a sigmoid if we're using binary labels
 			m_out = torch.sigmoid(m_out)
+		y=y.long()
 		loss = self.loss_fn(m_out, y)
 		acc = self.get_accuracy(m_out, y)
-		y=y.long().squeeze()
+		y=y.squeeze()
 		return loss, acc, len(y),m_out,y
 # 		return loss, acc, len(y)
 
@@ -216,6 +230,7 @@ class Model(nn.Module):
 		embedder = torch.nn.Embedding(max(counter, 500), self.emb_dim, 0) # Making this 2x so there there is slack.
 		if self.use_cuda:
 			embedder = embedder.cuda()
+# 		print("Create:",embedder.is_cuda)
 		return this_map, embedder
 
 	def remap_embedder(self, entries, cntr_max):
@@ -235,6 +250,7 @@ class Model(nn.Module):
 			self.setid_to_map_map = defaultdict(lambda: {})
 		if 'Program Counter' in self.feat_idx_map:
 			if set_id not in self.setid_to_map_map['Program Counter']:
+# 				print("Access REmap",self.pc.embedding.weight)
 				max_emb_cnt = self.pc_embedding.weight.shape[0]
 				feat_idx = self.feat_idx_map['Program Counter']
 				entries = [b[feat_idx] for b in dataset]
@@ -254,6 +270,7 @@ class Model(nn.Module):
 		if 'Program Counter' in self.feat_idx_map:
 			feat_idx = self.feat_idx_map['Program Counter']
 			self.pc_emb_map, self.pc_embedding = self.create_embedder(dataset, feat_idx, temporal_order=temp_order)
+# 			print("Set PC:",self.pc_embedding.weight.is_cuda)
 		if 'Set' in self.feat_idx_map:
 			feat_idx = self.feat_idx_map['Set']
 			self.set_emb_map, self.set_embedding = self.create_embedder(dataset, feat_idx, temporal_order=temp_order)
@@ -280,7 +297,7 @@ class TFormer(Model):
 		self.pos_embeddings = SinusoidalPositionalEmbedding(kwargs['d_model'], self.pos_emb_pad_idx)
 
 	def format_batch(self, batch):
-# 		batch = np.array(batch)
+		batch = np.array(batch)
 		x_pc = torch.zeros( batch.shape[0] ).long()
 		x_set = torch.zeros( batch.shape[0] ).long()
 		x_set_occ = torch.zeros( batch.shape[0] ).long()
@@ -298,16 +315,15 @@ class TFormer(Model):
 			if 'Set Occupancy' in self.feat_idx_map:
 				x_set_occ[i] = self.set_occ_emb_map[b[self.feat_idx_map['Set Occupancy']]]
 		x_pc = reshape(x_pc, p_win_sz=self.pred_window_sz)
+		
 		y = reshape(y, p_win_sz=self.pred_window_sz)
-
-
 		mask = gen_bias_mask(x_pc.shape[-1]).squeeze() # After doing the reshaping
-		pos_emb = self.pos_embeddings(x_pc)
-		pos_emb = torch.transpose(pos_emb, 1, 0)
 		if self.use_cuda:
 			x = x_pc.cuda()
 		else:
 			x = x_pc
+		pos_emb = self.pos_embeddings(x)
+		pos_emb = torch.transpose(pos_emb, 1, 0)
 		x = self.pc_embedding(x)
 		y = y.float()
 		x = torch.transpose(x, 1, 0)
@@ -335,10 +351,11 @@ class TFormer(Model):
 		x, y, mask, pos_embed = self.format_batch(batch)
 		x = x + pos_embed  # Add the positional embedding
 		m_out = self.encoder(x, mask)
+# 		print("Encoder output M_out",m_out.shape)
 		m_out1 = F.relu(m_out)
 		m_out2 = self.proj(m_out1)
-		# Need to do the right amount of sub-indexing
-		m_out2 = m_out2[-self.pred_window_sz:, :, :]
+		# Need to do t2[-self.pred_window_sz:, :, :]
+		m_out2 = m_out2[-self.pred_window_sz:, :, :]#the right amount of sub-indexing
 		m_out2 = m_out2.view(-1, m_out2.shape[-1])
 		y = y[-self.pred_window_sz:].flatten()
 		bsz = len(y)
@@ -347,10 +364,10 @@ class TFormer(Model):
 			m_out2 = torch.sigmoid(m_out2)
 		if self.loss_fn_name == 'CE':
 			y = y.long()
-# 		loss = self.loss_fn(m_out2, y)
-# 		acc = self.get_accuracy(m_out2, y)
-# 		y=y.long().squeeze()
-		return loss, acc, bsz,m_out2,y
+		loss = self.loss_fn(m_out2, y)
+		acc = self.get_accuracy(m_out2, y)
+		y=y.long().squeeze()
+		return loss, acc, bsz,m_out2,y,self.pred_window_sz
 # 		return m_out2 #, loss, acc, bsz
 
 	def forward_( self, x, mask, pos_embed ):
@@ -405,9 +422,12 @@ class MLP(Model):
 			x = torch.tensor(x_pc).cuda()
 		else:
 			x = torch.tensor(x_pc)
-		print(x.is_cuda,self.pc_embedding.weight.is_cuda)
 		x = self.pc_embedding(x.long())
+		if torch.cuda.is_available():
+			x.cuda()
 		y = torch.tensor(y).float()
+		if torch.cuda.is_available():
+			y.cuda()
 		if 'Set' in self.feat_idx_map:
 			x_set = torch.tensor(x_set)
 			if self.use_cuda:
