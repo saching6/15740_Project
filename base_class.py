@@ -113,8 +113,8 @@ class BaseClass:
 				self.teacher_model.remap_embedders(dataset, set_id)
 				data_iterator = get_batch_iterator(dataset, self.batch_size, shuffle=self.shuffle)
 				for batch in data_iterator:
-					_,acc_student,bsz_student,student_out,label = self.student_model(batch)
-					_,acc_teacher,bsz_teacher,teacher_out,label = self.teacher_model(batch)
+					student_out= self.student_model(batch)
+					teacher_out = self.teacher_model(batch)
 					distill_loss = self.calculate_kd_loss(student_out, teacher_out, label.long())
 					pred = student_out.argmax(dim=1, keepdim=True)
 	# 				correct += pred.eq(label.view_as(pred)).sum().item()

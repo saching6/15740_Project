@@ -157,6 +157,7 @@ class Model(nn.Module):
 
 	def forward(self, batch):
 		x, y = self.format_batch(batch)
+		print(x.is_cuda,y.is_cuda,self.pc_embedding.weight.is_cuda)
 		# Assumes the data has already been formatted appropriately
 		m_out = self.model(x)
 		if self.loss_fn_name == 'BCE':
@@ -349,8 +350,8 @@ class TFormer(Model):
 # 		loss = self.loss_fn(m_out2, y)
 # 		acc = self.get_accuracy(m_out2, y)
 # 		y=y.long().squeeze()
-# 		return loss, acc, bsz,m_out,y
-		return m_out2 #, loss, acc, bsz
+		return loss, acc, bsz,m_out2,y
+# 		return m_out2 #, loss, acc, bsz
 
 	def forward_( self, x, mask, pos_embed ):
 			x += pos_embed
@@ -404,6 +405,7 @@ class MLP(Model):
 			x = torch.tensor(x_pc).cuda()
 		else:
 			x = torch.tensor(x_pc)
+		print(x.is_cuda,self.pc_embedding.weight.is_cuda)
 		x = self.pc_embedding(x.long())
 		y = torch.tensor(y).float()
 		if 'Set' in self.feat_idx_map:
