@@ -6,6 +6,7 @@ from collections import defaultdict
 import pdb
 import numpy as np
 import math
+from positional_embeddings import SinusoidalPositionalEmbedding
 
 FC_CONFIG = {
     'layers': [192, 400, 2],
@@ -53,8 +54,8 @@ TFORMER_CONFIG_2 = {
 }
 
 def reshape(x, p_win_sz=32):
-#	if not torch.is_tensor( x ):
-#		x = torch.tensor( x )
+	if not torch.is_tensor( x ):
+		x = torch.tensor( x )
 	d = p_win_sz * 2
 	x_stack = [ x.narrow( 0, i, d ) for i in range( 0, x.numel() - d + 1 ) ]
 	return torch.stack( x_stack, axis=-1 )
@@ -113,7 +114,7 @@ def gen_bias_mask(max_length):
 	Generates bias values (-Inf) to mask future timesteps during attention
 	"""
 
-	torch_mask = torch.triu(torch.full([max_length, max_length], -float('inf')))
+	torch_mask = torch.triu(torch.full([max_length, max_length], -float('inf')), diagonal=1)
 	return torch_mask.unsqueeze(0).unsqueeze(1)
 
 def gen_timing_signal(length, channels, min_timescale=1.0, max_timescale=1.0e4):
@@ -212,7 +213,7 @@ class Model(nn.Module):
 				this_map[id_] = counter
 				counter += 1
 		embedder = torch.nn.Embedding(max(counter, 500), self.emb_dim, 0) # Making this 2x so there there is slack.
-		if torch.cuda.is_available():
+		if self.use_cuda:
 			embedder = embedder.cuda()
 		return this_map, embedder
 
@@ -274,11 +275,14 @@ class TFormer(Model):
 		# Adding for the reuse-distance
 # 		self.proj_reuse = nn.Linear(kwargs['d_model'], kwargs['reuse_out_sz'])
 		self.pred_window_sz = kwargs['pred_window_sz']
+		self.pos_emb_pad_idx = 0
+		self.pos_embeddings = SinusoidalPositionalEmbedding(kwargs['d_model'], self.pos_emb_pad_idx)
 
 	def format_batch(self, batch):
-		x_pc = torch.zeros( batch.shape[0] ) 
-		x_set = torch.zeros( batch.shape[0] )   
-		x_set_occ = torch.zeros( batch.shape[0] )   
+# 		batch = np.array(batch)
+		x_pc = torch.zeros( batch.shape[0] ).long()
+		x_set = torch.zeros( batch.shape[0] ).long()
+		x_set_occ = torch.zeros( batch.shape[0] ).long()
 		y = torch.zeros( batch.shape[0] )  
 
 		for i, b in enumerate( batch ):
@@ -297,20 +301,18 @@ class TFormer(Model):
 
 
 		mask = gen_bias_mask(x_pc.shape[-1]).squeeze() # After doing the reshaping
-		print( "---- So Far So Good ----" )
-		pos_emb = gen_timing_signal(x_pc.shape[-1], self.emb_dim * (len(self.feat_idx_map) - 1))
+		pos_emb = self.pos_embeddings(x_pc)
 		pos_emb = torch.transpose(pos_emb, 1, 0)
 		if self.use_cuda:
-			x = torch.tensor(x_pc).cuda()
+			x = x_pc.cuda()
 		else:
-			x = torch.tensor(x_pc)
+			x = x_pc
 		x = self.pc_embedding(x)
-		y = torch.tensor(y).float()
+		y = y.float()
 		x = torch.transpose(x, 1, 0)
 		y = torch.transpose(y, 1, 0)
 		if 'Set' in self.feat_idx_map:
 			x_set = reshape(np.array(x_set), p_win_sz=self.pred_window_sz)
-			x_set = torch.tensor(x_set)
 			if self.use_cuda:
 				x_set = x_set.cuda()
 			x_set = self.set_embedding(x_set)
@@ -318,7 +320,6 @@ class TFormer(Model):
 			x = torch.cat([x, x_set], dim=-1)
 		if 'Set Occupancy' in self.feat_idx_map:
 			x_set_occ = reshape(np.array(x_set_occ), p_win_sz=self.pred_window_sz)
-			x_set_occ = torch.tensor(x_set_occ)
 			if self.use_cuda:
 				x_set_occ = x_set_occ.cuda()
 			x_set_occ = self.set_occ_embedding(x_set_occ)
@@ -333,23 +334,23 @@ class TFormer(Model):
 		x, y, mask, pos_embed = self.format_batch(batch)
 		x = x + pos_embed  # Add the positional embedding
 		m_out = self.encoder(x, mask)
-		m_out = F.relu(m_out)
-		m_out = self.proj(m_out)
+		m_out1 = F.relu(m_out)
+		m_out2 = self.proj(m_out1)
 		# Need to do the right amount of sub-indexing
-		m_out = m_out[-self.pred_window_sz:, :, :]
-		m_out = m_out.view(-1, m_out.shape[-1])
+		m_out2 = m_out2[-self.pred_window_sz:, :, :]
+		m_out2 = m_out2.view(-1, m_out2.shape[-1])
 		y = y[-self.pred_window_sz:].flatten()
 		bsz = len(y)
 		if self.loss_fn_name == 'BCE':
 			# We need to do a sigmoid if we're using binary labels
-			m_out = torch.sigmoid(m_out)
+			m_out2 = torch.sigmoid(m_out2)
 		if self.loss_fn_name == 'CE':
 			y = y.long()
-		loss = self.loss_fn(m_out, y)
-		acc = self.get_accuracy(m_out, y)
-		y=y.long().squeeze()
-		return loss, acc, bsz,m_out,y
-# 		return loss, acc, bsz
+# 		loss = self.loss_fn(m_out2, y)
+# 		acc = self.get_accuracy(m_out2, y)
+# 		y=y.long().squeeze()
+# 		return loss, acc, bsz,m_out,y
+		return m_out2 #, loss, acc, bsz
 
 	def forward_( self, x, mask, pos_embed ):
 			x += pos_embed
@@ -403,19 +404,19 @@ class MLP(Model):
 			x = torch.tensor(x_pc).cuda()
 		else:
 			x = torch.tensor(x_pc)
-		x = self.pc_embedding(x)
+		x = self.pc_embedding(x.long())
 		y = torch.tensor(y).float()
 		if 'Set' in self.feat_idx_map:
 			x_set = torch.tensor(x_set)
 			if self.use_cuda:
 				x_set = x_set.cuda()
-			x_set = self.set_embedding(x_set)
+			x_set = self.set_embedding(x_set.long())
 			x = torch.cat([x, x_set], dim=-1)
 		if 'Set Occupancy' in self.feat_idx_map:
 			x_set_occ = torch.tensor(x_set_occ)
 			if self.use_cuda:
 				x_set_occ = x_set_occ.cuda()
-			x_set_occ = self.set_occ_embedding(x_set_occ)
+			x_set_occ = self.set_occ_embedding(x_set_occ.long())
 			x = torch.cat([x, x_set_occ], dim=-1)
 		if self.use_cuda:
 			x, y = x.cuda(), y.cuda()
