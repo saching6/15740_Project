@@ -21,8 +21,6 @@ class BaseClass:
 	:param temp (float): Temperature parameter for distillation
 	:param distil_weight (float): Weight paramter for distillation loss
 	:param device (str): Device used for training; 'cpu' for cpu and 'cuda' for gpu
-	:param log (bool): True if logging required
-	:param logdir (str): Directory for storing logs
 	"""
 	def __init__(
 		self,
@@ -31,6 +29,7 @@ class BaseClass:
 		optimizer_teacher,
 		optimizer_student,
 		dataset,
+		eval_dataset,
 		batch_size,
 		shuffle,
 		student_type='SFC',
@@ -40,11 +39,10 @@ class BaseClass:
 		device="cpu",
 	):
 
-# 		self.train_loader = train_loader
-# 		self.val_loader = val_loader
 		self.optimizer_teacher = optimizer_teacher
 		self.optimizer_student = optimizer_student
 		self.setwise_dataset=dataset
+		self.setwise_eval_dataset=eval_dataset
 		self.temp = temp
 		self.batch_size=batch_size
 		self.shuffle=shuffle
@@ -55,6 +53,7 @@ class BaseClass:
         
 		self.student_model = student_model.to(self.device)
 		self.teacher_model = teacher_model.to(self.device)
+		self.pred_window_size=teacher_model.pred_window_sz
 		try:
 			self.loss_fn = loss_fn.to(self.device)
 			self.ce_fn = nn.CrossEntropyLoss().to(self.device)
@@ -80,9 +79,6 @@ class BaseClass:
 		"""
 		Function to train student model - for internal use only.
 		:param epochs (int): Number of epochs you want to train the teacher
-		:param plot_losses (bool): True if you want to plot the losses
-		:param save_model (bool): True if you want to save the student model
-		:param save_model_pth (str): Path where you want to save the student model
 		"""
 		self.teacher_model.eval()
 		self.student_model.train()
@@ -140,17 +136,11 @@ class BaseClass:
 	def train_student(
 		self,
 		epochs=20,
-		plot_losses=True,
-		save_model=True,
-		save_model_pth="./models/student.pt",
 	):
 		"""
 		Function that will be training the student
 
 		:param epochs (int): Number of epochs you want to train the teacher
-		:param plot_losses (bool): True if you want to plot the losses
-		:param save_model (bool): True if you want to save the student model
-		:param save_model_pth (str): Path where you want to save the student model
 		"""
 		self._train_student(epochs)
 
@@ -165,68 +155,43 @@ class BaseClass:
 
 		raise NotImplementedError
 
-	def _evaluate_model(self, model, verbose=True):
+	def evaluate_student(self):
 		"""
 		Evaluate the given model's accuaracy over val set.
 		For internal use only.
 		:param model (nn.Module): Model to be used for evaluation
 		:param verbose (bool): Display Accuracy
 		"""
-		model.eval()
-		length_of_dataset = len(self.val_loader.dataset)
-		correct = 0
-		outputs = []
+		
+		self.student_model.eval()
+		
+		print("Evaluating Student...")
+		
+		
+		setwise_keys = list(self.setwise_dataset.keys())
+		accs=[]
+		for set_id  in setwise_keys:
+			dataset = self.setwise_dataset[set_id]
+			self.student_model.remap_embedders(dataset, set_id)
+			data_iterator = get_batch_iterator(dataset, self.batch_size, shuffle=self.shuffle)
+			for batch in data_iterator:
+				if(self.student_type=="SFC"):
+					loss_s, acc_s,_,student_out,label= self.student_model(batch)
+					student_out = self.reshape(student_out, p_win_sz=self.pred_window_size)
+					student_out = student_out.permute(2, 0, 1)
+					student_out = student_out[-self.pred_window_size:, :, :]
+					student_out = student_out.reshape(-1, student_out.shape[-1])
 
-		with torch.no_grad():
-			for data, target in self.val_loader:
-				data = data.to(self.device)
-				target = target.to(self.device)
-				output = model(data)
+					#Reshaping label when evaluating
+					label = self.reshape(label, p_win_sz=self.pred_window_size)
+					label = torch.transpose(label, 1, 0)
+					label = label[-self.pred_window_size:].flatten()
+					acc_s=student_out.argmax(dim=-1).eq(label).sum()
+				else:
+					loss_s, acc_s,_,student_out,_,label= self.student_model(batch)
 
-				if isinstance(output, tuple):
-					output = output[0]
-				outputs.append(output)
+				acc_s=acc_s/student_out.shape[0]
+				accs+=[acc_s.item()]
+		print("Student Average Accuracy:{} Student Median Accuracy:{} |Student Loss:{}".format(np.mean(accs),np.median(accs),loss_s.item()))
 
-				pred = output.argmax(dim=1, keepdim=True)
-				correct += pred.eq(target.view_as(pred)).sum().item()
-				accuracy = correct / length_of_dataset
 
-		if verbose:
-			print("-" * 80)
-			print(f"Accuracy: {accuracy}")
-		return outputs, accuracy
-
-	def evaluate(self, teacher=False):
-		"""
-		Evaluate method for printing accuracies of the trained network
-
-		:param teacher (bool): True if you want accuracy of the teacher network
-		"""
-		if teacher:
-			model = deepcopy(self.teacher_model).to(self.device)
-		else:
-			model = deepcopy(self.student_model).to(self.device)
-		_, accuracy = self._evaluate_model(model)
-
-		return accuracy
-
-# 	def get_parameters(self):
-# 		"""
-# 		Get the number of parameters for the teacher and the student network
-# 		"""
-# 		teacher_params = sum(p.numel() for p in self.teacher_model.parameters())
-# 		student_params = sum(p.numel() for p in self.student_model.parameters())
-
-# 		print("-" * 80)
-# 		print(f"Total parameters for the teacher network are: {teacher_params}")
-# 		print(f"Total parameters for the student network are: {student_params}")
-
-# 	def post_epoch_call(self, epoch):
-# 		"""
-# 		Any changes to be made after an epoch is completed.
-
-# 		:param epoch (int) : current epoch number
-# 		:return            : nothing (void)
-# 		"""
-
-# 		pass

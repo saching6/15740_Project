@@ -15,7 +15,7 @@ FC_CONFIG = {
 }
 
 STUDENT_CONFIG = {
-    'layers': [128, 2],
+    'layers': [32, 2],
     'dropout': 0.2,
 	'feat_map': {'Program Counter' : 0, 'Set Occupancy': 1, 'Belady Friendly': 2} #'Set': 1,
 }

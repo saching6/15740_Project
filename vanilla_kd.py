@@ -30,6 +30,7 @@ class VanillaKD(BaseClass):
 		optimizer_teacher,
 		optimizer_student,
 		dataset,
+		eval_dataset,
 		batch_size,
 		shuffle,
 		student_type="SFC",
@@ -44,13 +45,14 @@ class VanillaKD(BaseClass):
 			optimizer_teacher,
 			optimizer_student,
 			dataset,
+			eval_dataset,
 			batch_size,
 			shuffle,
 			student_type,
 			loss_fn,
 			temp,
 			distil_weight,
-			device,
+			device
 		)
 
 	def calculate_kd_loss(self, y_pred_student, y_pred_teacher, y_true):
