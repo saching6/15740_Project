@@ -32,13 +32,13 @@ TFORMER_CONFIG = {
 }
 
 TFORMER_CONFIG_1 = {
-	'd_model': 96,
+	'd_model': 64,
 	'n_head': 2,
 	'num_encoder_layers': 3,
 	'dim_feedforward': 128,
 	'dropout': 0.2,
 	'final_out_sz': 2,
-	'pred_window_sz': 8,
+	'pred_window_sz': 5,
 	'feat_map': {'Program Counter' : 0, 'Set Occupancy': 1, 'Belady Friendly': 2} #'Set': 1,
 }
 
@@ -279,7 +279,7 @@ class TFormer(Model):
 		self.pos_embeddings = SinusoidalPositionalEmbedding(kwargs['d_model'], self.pos_emb_pad_idx)
 
 	def format_batch(self, batch):
-		batch = np.array(batch)
+# 		batch = np.array(batch)
 		x_pc = torch.zeros( batch.shape[0] ).long()
 		x_set = torch.zeros( batch.shape[0] ).long()
 		x_set_occ = torch.zeros( batch.shape[0] ).long()
@@ -347,8 +347,8 @@ class TFormer(Model):
 		loss = self.loss_fn(m_out2, y)
 		acc = self.get_accuracy(m_out2, y)
 # 		y=y.long().squeeze()
-# 		return loss, acc, bsz,m_out,y
-		return loss, acc, bsz
+		return loss, acc, bsz, (m_out2.cpu().detach(), y.cpu().detach())
+# 		return loss, acc, bsz
 
 	def forward_( self, x, mask, pos_embed ):
 			x += pos_embed
