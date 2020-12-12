@@ -102,24 +102,22 @@ class BaseClass:
 				self.teacher_model.remap_embedders(dataset, set_id)
 				data_iterator = get_batch_iterator(dataset, self.batch_size, shuffle=self.shuffle)
 				for batch in data_iterator:
-					loss_t, acc_t,_,teacher_out,label,pred_window_size = self.teacher_model(batch)
+					loss_t, acc_t,_,teacher_out,label = self.teacher_model(batch)
 					acc_t=acc_t/label.shape[-1]
 					
 					if(self.student_type=="SFC"):
 						loss_s, acc_s,_,student_out,_= self.student_model(batch)
-						student_out = self.reshape(student_out, p_win_sz=pred_window_size)
+						student_out = self.reshape(student_out, p_win_sz=self.pred_window_size)
 						student_out = student_out.permute(2, 0, 1)
-						student_out = student_out[-pred_window_size:, :, :]
+						student_out = student_out[-self.pred_window_size:, :, :]
 						student_out = student_out.reshape(-1, student_out.shape[-1])
 						acc_s=student_out.argmax(dim=-1).eq(label).sum()
 					else:
-						loss_s, acc_s,_,student_out,_,_= self.student_model(batch)
+						loss_s, acc_s,_,student_out,_= self.student_model(batch)
 					
 					acc_s=acc_s/label.shape[-1]
 					
 					distill_loss = self.calculate_kd_loss(student_out, teacher_out, label.long())
-# 					pred = student_out.argmax(dim=1, keepdim=True)
-	# 				correct += pred.eq(label.view_as(pred)).sum().item()
 					self.optimizer_student.zero_grad()
 					distill_loss.backward()
 					nn.utils.clip_grad_norm_(self.student_model.parameters(), MAX_GRAD_NORM)
@@ -188,10 +186,36 @@ class BaseClass:
 					label = label[-self.pred_window_size:].flatten()
 					acc_s=student_out.argmax(dim=-1).eq(label).sum()
 				else:
-					loss_s, acc_s,_,student_out,_,label= self.student_model(batch)
-
+					loss_s, acc_s,_,student_out,label= self.student_model(batch)
+			
 				acc_s=acc_s/student_out.shape[0]
 				accs+=[acc_s.item()]
 		print("Student Average Accuracy:{} Student Median Accuracy:{} |Student Loss:{}".format(np.mean(accs),np.median(accs),loss_s.item()))
+		
+		
+	def evaluate_teacher(self):
+		"""
+		Evaluate the given model's accuaracy over val set.
+		For internal use only.
+		:param model (nn.Module): Model to be used for evaluation
+		:param verbose (bool): Display Accuracy
+		"""
+		
+		self.student_model.eval()
+		
+		print("Evaluating Teacher...")
+		
+		
+		setwise_keys = list(self.setwise_dataset.keys())
+		accs=[]
+		for set_id  in setwise_keys:
+			dataset = self.setwise_dataset[set_id]
+			self.teacher_model.remap_embedders(dataset, set_id)
+			data_iterator = get_batch_iterator(dataset, self.batch_size, shuffle=self.shuffle)
+			for batch in data_iterator:
+				loss_t, acc_t,_,teacher_out,label = self.teacher_model(batch)
+				acc_t=acc_t/label.shape[-1]
+				accs+=[acc_t.item()]
+		print("Teacher Average Accuracy:{} Teacher Median Accuracy:{} |Teacher Loss:{}".format(np.mean(accs),np.median(accs),loss_t.item()))
 
 

@@ -8,7 +8,6 @@ class VanillaKD(BaseClass):
 	"""
 	Original implementation of Knowledge distillation from the paper "Distilling the
 	Knowledge in a Neural Network" https://arxiv.org/pdf/1503.02531.pdf
-
 	:param teacher_model (torch.nn.Module): Teacher model
 	:param student_model (torch.nn.Module): Student model
 	:param train_loader (torch.utils.data.DataLoader): Dataloader for training
@@ -19,8 +18,6 @@ class VanillaKD(BaseClass):
 	:param temp (float): Temperature parameter for distillation
 	:param distil_weight (float): Weight paramter for distillation loss
 	:param device (str): Device used for training; 'cpu' for cpu and 'cuda' for gpu
-	:param log (bool): True if logging required
-	:param logdir (str): Directory for storing logs
 	"""
 
 	def __init__(
@@ -58,7 +55,6 @@ class VanillaKD(BaseClass):
 	def calculate_kd_loss(self, y_pred_student, y_pred_teacher, y_true):
 		"""
 		Function used for calculating the KD loss during distillation
-
 		:param y_pred_student (torch.FloatTensor): Prediction made by the student model
 		:param y_pred_teacher (torch.FloatTensor): Prediction made by the teacher model
 		:param y_true (torch.FloatTensor): Original label

@@ -54,7 +54,10 @@ def group_by_set(dataset, set_idx=1):
 	unique_set_ids = np.unique(all_sets)
 	grouped_data = {}
 	for s_id in unique_set_ids:
-		grouped_data[s_id] = dataset[dataset[:, set_idx] == s_id]
+		result = dataset[dataset[:, set_idx] == s_id]
+		if result.shape[0] < 15: # we need 2 or more entries:
+			continue
+		grouped_data[s_id] = result
 	return grouped_data
 
 if __name__ == '__main__':
