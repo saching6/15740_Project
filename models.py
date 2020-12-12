@@ -286,7 +286,7 @@ class TFormer(Model):
 		y = torch.zeros( batch.shape[0] )  
 
 		for i, b in enumerate( batch ):
-			y[i] = b[-1]
+			y[i] = b[self.feat_idx_map['Belady Friendly']]
 			# Convert the program counter to an embedding
 			if 'Program Counter' in self.feat_idx_map:
 				x_pc[i] = self.pc_emb_map[b[self.feat_idx_map['Program Counter']]]
@@ -296,9 +296,11 @@ class TFormer(Model):
                 
 			if 'Set Occupancy' in self.feat_idx_map:
 				x_set_occ[i] = self.set_occ_emb_map[b[self.feat_idx_map['Set Occupancy']]]
+
 		x_pc = reshape(x_pc, p_win_sz=self.pred_window_sz)
 		y = reshape(y, p_win_sz=self.pred_window_sz)
 		mask = gen_bias_mask(x_pc.shape[-1]).squeeze() # After doing the reshaping
+
 		if self.use_cuda:
 			x = x_pc.cuda()
 		else:
